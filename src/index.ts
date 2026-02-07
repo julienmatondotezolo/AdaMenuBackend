@@ -1,22 +1,19 @@
 import express from "express";
 import cors from "cors";
+import path from "path";
 import dotenv from "dotenv";
 import menuRoutes from "./routes/menu";
+import widgetRoutes from "./routes/widget";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3002;
 
-// CORS configuration
+// CORS configuration — allow any origin for the widget endpoints
 app.use(
   cors({
-    origin: [
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://localhost:5173",
-      "https://adamenu.vercel.app",
-    ],
+    origin: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
   })
@@ -26,8 +23,12 @@ app.use(
 app.use(express.json({ limit: "500mb" }));
 app.use(express.urlencoded({ extended: true, limit: "500mb" }));
 
+// Serve static files (widget.js, etc.)
+app.use(express.static(path.join(__dirname, "../public")));
+
 // Routes
 app.use("/api/menu", menuRoutes);
+app.use("/api/widget", widgetRoutes);
 
 // Health check
 app.get("/health", (_req, res) => {
