@@ -281,6 +281,39 @@ export async function generateMenuTemplate(
     throw new Error("GPT response page missing required fields (id, format, layers)");
   }
 
+  // Fix: GPT sometimes puts elements directly in the layers array
+  // instead of wrapping them in proper layer objects with { id, name, elements: [...] }
+  for (const pg of parsed.pages) {
+    if (Array.isArray(pg.layers) && pg.layers.length > 0) {
+      const firstLayer = pg.layers[0];
+      // Check if layers contains raw elements instead of layer objects
+      if (firstLayer.type && !firstLayer.elements) {
+        // Elements are flat in the layers array — regroup by type into proper layers
+        const elements = pg.layers as any[];
+        const grouped: Record<string, any[]> = {};
+        for (const el of elements) {
+          const layerName =
+            el.type === "shape" ? "Shapes" :
+            el.type === "text" ? "Text" :
+            el.type === "data" ? "Menu Items" :
+            el.type === "image" ? "Images" :
+            el.type === "background" ? "Background" : "Other";
+          if (!grouped[layerName]) grouped[layerName] = [];
+          grouped[layerName].push(el);
+        }
+        pg.layers = Object.entries(grouped).map(([name, els], i) => ({
+          id: `layer-${i + 1}-${Date.now()}`,
+          name,
+          visible: true,
+          locked: false,
+          opacity: 1,
+          elements: els,
+        }));
+        console.log(`[GPT] Fixed flat layers → ${pg.layers.length} grouped layers (${elements.length} elements)`);
+      }
+    }
+  }
+
   // Ensure fonts.loadedFonts is an array (GPT might output a Set)
   if (parsed.fonts) {
     if (
