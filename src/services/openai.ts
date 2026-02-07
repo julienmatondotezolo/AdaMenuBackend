@@ -1,326 +1,436 @@
 import OpenAI from "openai";
 import dotenv from "dotenv";
+import { v4 as uuidv4 } from "uuid";
 
 dotenv.config();
 
 export const openaiClient = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  timeout: 120_000, // 2 min
+  timeout: 120_000,
   maxRetries: 2,
 });
 
-/**
- * Extract JSON from GPT response that may contain preamble text,
- * markdown code fences, or explanations before/after the JSON.
- */
-function extractJSON(raw: string): string {
-  let s = raw.trim();
+// ---------------------------------------------------------------------------
+// Types for parsed tags
+// ---------------------------------------------------------------------------
 
-  // 1. Try extracting from markdown code fences
-  const fenceMatch = s.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
-  if (fenceMatch) {
-    s = fenceMatch[1].trim();
-    return s;
-  }
-
-  // 2. Try to find the first { and last } — the JSON object
-  const firstBrace = s.indexOf("{");
-  const lastBrace = s.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    s = s.substring(firstBrace, lastBrace + 1);
-    return s;
-  }
-
-  // 3. If we only have an opening brace (truncated), return from there
-  if (firstBrace !== -1) {
-    s = s.substring(firstBrace);
-    return s;
-  }
-
-  // 4. Return as-is — let the parser fail with a clear error
-  return s;
+interface TagBase {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
-/**
- * Try to repair truncated JSON by closing open brackets/braces.
- * Works when GPT hit the token limit mid-output.
- */
-function tryRepairJSON(jsonStr: string): any | null {
-  try {
-    // Count unclosed brackets
-    let braces = 0;
-    let brackets = 0;
-    let inString = false;
-    let escape = false;
+interface BgTag {
+  type: "BG";
+  color: string;
+}
 
-    for (const ch of jsonStr) {
-      if (escape) { escape = false; continue; }
-      if (ch === "\\") { escape = true; continue; }
-      if (ch === '"') { inString = !inString; continue; }
-      if (inString) continue;
-      if (ch === "{") braces++;
-      if (ch === "}") braces--;
-      if (ch === "[") brackets++;
-      if (ch === "]") brackets--;
+interface ShapeTag extends TagBase {
+  type: "SHAPE";
+  shape: "rect" | "circle" | "triangle";
+  fill: string;
+  stroke?: string;
+  strokeWidth?: number;
+  radius?: number;
+  opacity?: number;
+}
+
+interface TextTag extends TagBase {
+  type: "TEXT";
+  content: string;
+  size: number;
+  fill: string;
+  weight?: "normal" | "bold";
+  style?: "normal" | "italic";
+  align?: "left" | "center" | "right";
+}
+
+interface DataTag extends TagBase {
+  type: "DATA";
+  textColor?: string;
+  fontSize?: number;
+  bgColor?: string;
+}
+
+interface ImageTag extends TagBase {
+  type: "IMAGE";
+}
+
+type ParsedTag = BgTag | ShapeTag | TextTag | DataTag | ImageTag;
+
+// ---------------------------------------------------------------------------
+// Tag prompt — compact output format for GPT
+// ---------------------------------------------------------------------------
+
+function buildTagPrompt(pageFormat: "A4" | "A5"): string {
+  const dim =
+    pageFormat === "A4"
+      ? { w: 2480, h: 3508 }
+      : { w: 1748, h: 2480 };
+
+  return `You are an expert menu designer. Analyze a photo of a restaurant menu and output a compact tag list describing every visual element.
+
+## CANVAS
+${dim.w}×${dim.h} pixels. Origin (0,0) = top-left. All values in pixels.
+
+## TAG FORMAT
+One tag per line. Return ONLY tags — no explanation, no markdown, no numbering.
+
+Available tags:
+
+[BG color=#HEXCOLOR]
+  → The page background color. Exactly one.
+
+[SHAPE rect x=N y=N w=N h=N fill=#HEX]
+[SHAPE circle x=N y=N w=N h=N fill=#HEX]
+[SHAPE triangle x=N y=N w=N h=N fill=#HEX]
+  → Colored blocks, panels, dividers, decorative shapes.
+  → Optional attrs: stroke=#HEX strokeWidth=N radius=N opacity=0.N
+
+[TEXT x=N y=N w=N h=N size=N fill=#HEX "The actual text content"]
+  → Headers, titles, section names, taglines, decorative text.
+  → Optional attrs: weight=bold style=italic align=center
+
+[DATA x=N y=N w=N h=N]
+  → Area where menu items are listed (name + price). One per section/column.
+  → Optional attrs: textColor=#HEX fontSize=N bgColor=#HEX
+
+[IMAGE x=N y=N w=N h=N]
+  → Photo or illustration placeholder.
+
+## RULES
+1. Be THOROUGH — capture EVERY section, column, panel, header, divider
+2. For multi-column layouts, use separate DATA tags per column
+3. For colored panels/sidebars, use SHAPE rect with the correct fill
+4. For horizontal dividers, use SHAPE rect with small h (5-15px)
+5. Read ALL text from the image — section headers, restaurant name, taglines, subtitles
+6. Estimate positions carefully — elements should not overlap unless intended
+7. Font sizes: titles 80-150, section headers 50-80, subtitles 30-50 (on ${dim.w}×${dim.h} canvas)
+8. A complex menu should have 15-40 tags. If you have fewer than 10, you're missing content.
+9. Put the text content in quotes at the END of the TEXT tag
+10. All coordinates must be within canvas bounds (0-${dim.w} for x, 0-${dim.h} for y)`;
+}
+
+// ---------------------------------------------------------------------------
+// Tag parser — converts GPT tag output into structured elements
+// ---------------------------------------------------------------------------
+
+export function parseTags(raw: string): ParsedTag[] {
+  const tags: ParsedTag[] = [];
+  const lines = raw.split("\n").map((l) => l.trim()).filter((l) => l.startsWith("["));
+
+  for (const line of lines) {
+    try {
+      // Remove surrounding brackets
+      const inner = line.replace(/^\[/, "").replace(/\]$/, "").trim();
+
+      // BG tag
+      if (inner.startsWith("BG ")) {
+        const color = extractAttr(inner, "color") || "#FFFFFF";
+        tags.push({ type: "BG", color });
+        continue;
+      }
+
+      // SHAPE tag
+      if (inner.startsWith("SHAPE ")) {
+        const parts = inner.split(/\s+/);
+        const shape = (parts[1] || "rect") as "rect" | "circle" | "triangle";
+        tags.push({
+          type: "SHAPE",
+          shape,
+          x: num(inner, "x"),
+          y: num(inner, "y"),
+          w: num(inner, "w"),
+          h: num(inner, "h"),
+          fill: extractAttr(inner, "fill") || "#000000",
+          stroke: extractAttr(inner, "stroke") || undefined,
+          strokeWidth: optNum(inner, "strokeWidth"),
+          radius: optNum(inner, "radius"),
+          opacity: optNum(inner, "opacity"),
+        });
+        continue;
+      }
+
+      // TEXT tag
+      if (inner.startsWith("TEXT ")) {
+        // Extract quoted content (last quoted string in the tag)
+        const contentMatch = inner.match(/"([^"]*)"(?:\s*$)/);
+        const content = contentMatch?.[1] || "";
+        tags.push({
+          type: "TEXT",
+          x: num(inner, "x"),
+          y: num(inner, "y"),
+          w: num(inner, "w"),
+          h: num(inner, "h"),
+          size: num(inner, "size"),
+          fill: extractAttr(inner, "fill") || "#000000",
+          weight: (extractAttr(inner, "weight") as "normal" | "bold") || undefined,
+          style: (extractAttr(inner, "style") as "normal" | "italic") || undefined,
+          align: (extractAttr(inner, "align") as "left" | "center" | "right") || undefined,
+          content,
+        });
+        continue;
+      }
+
+      // DATA tag
+      if (inner.startsWith("DATA ")) {
+        tags.push({
+          type: "DATA",
+          x: num(inner, "x"),
+          y: num(inner, "y"),
+          w: num(inner, "w"),
+          h: num(inner, "h"),
+          textColor: extractAttr(inner, "textColor") || undefined,
+          fontSize: optNum(inner, "fontSize"),
+          bgColor: extractAttr(inner, "bgColor") || undefined,
+        });
+        continue;
+      }
+
+      // IMAGE tag
+      if (inner.startsWith("IMAGE ")) {
+        tags.push({
+          type: "IMAGE",
+          x: num(inner, "x"),
+          y: num(inner, "y"),
+          w: num(inner, "w"),
+          h: num(inner, "h"),
+        });
+        continue;
+      }
+    } catch (err) {
+      console.warn(`[Parser] Skipping malformed tag: ${line}`);
     }
-
-    if (braces <= 0 && brackets <= 0) return null; // Not a truncation issue
-
-    // Close any open string
-    let repaired = jsonStr;
-    if (inString) repaired += '"';
-
-    // Remove trailing comma/colon that would be invalid
-    repaired = repaired.replace(/[,:\s]+$/, "");
-
-    // Close open brackets and braces
-    for (let i = 0; i < brackets; i++) repaired += "]";
-    for (let i = 0; i < braces; i++) repaired += "}";
-
-    return JSON.parse(repaired);
-  } catch {
-    return null;
   }
+
+  return tags;
 }
 
-/**
- * Build the system prompt for menu template generation.
- * This is the most critical piece — it tells GPT-4o Vision exactly
- * what JSON structure to produce for a MenuProject.
- */
-function buildSystemPrompt(pageFormat: "A4" | "A5"): string {
-  const dimensions =
+// Extract attr=value from tag string
+function extractAttr(s: string, key: string): string | undefined {
+  const re = new RegExp(`${key}=([^\\s"\\]]+)`);
+  const m = s.match(re);
+  return m?.[1];
+}
+
+function num(s: string, key: string): number {
+  const v = extractAttr(s, key);
+  return v ? parseInt(v, 10) || 0 : 0;
+}
+
+function optNum(s: string, key: string): number | undefined {
+  const v = extractAttr(s, key);
+  if (!v) return undefined;
+  const n = parseFloat(v);
+  return isNaN(n) ? undefined : n;
+}
+
+// ---------------------------------------------------------------------------
+// Build MenuProject JSON from parsed tags
+// ---------------------------------------------------------------------------
+
+export function buildMenuProject(
+  tags: ParsedTag[],
+  restaurantName?: string,
+  pageFormat: "A4" | "A5" = "A4"
+): object {
+  const dim =
     pageFormat === "A4"
       ? { width: 2480, height: 3508, printWidth: 210, printHeight: 297 }
       : { width: 1748, height: 2480, printWidth: 148, printHeight: 210 };
 
-  return `You are an expert menu designer and layout analyst. Your job is to analyze a photograph of a physical restaurant menu page and generate a JSON structure that recreates its layout digitally.
+  // Extract background color
+  const bgTag = tags.find((t) => t.type === "BG") as BgTag | undefined;
+  const bgColor = bgTag?.color || "#FFFFFF";
 
-## OUTPUT FORMAT
-You MUST return ONLY valid JSON — no markdown, no code fences, no explanation. Just the raw JSON object.
+  // Group elements by type into layers
+  const shapes: any[] = [];
+  const texts: any[] = [];
+  const dataEls: any[] = [];
+  const images: any[] = [];
 
-## CANVAS DIMENSIONS
-The digital canvas is ${dimensions.width}×${dimensions.height} pixels (${pageFormat} at 300 DPI, ${dimensions.printWidth}×${dimensions.printHeight}mm).
-All x, y, width, height values must be in pixels within this canvas.
+  let zIndex = 0;
 
-## COORDINATE SYSTEM
-- Origin (0,0) is the top-left corner
-- x increases to the right, y increases downward
-- Elements must stay within the canvas boundaries (0 to ${dimensions.width} for x/width, 0 to ${dimensions.height} for y/height)
+  for (const tag of tags) {
+    if (tag.type === "BG") continue;
 
-## WHAT TO ANALYZE
-1. **Background color** — detect the dominant background color of the menu
-2. **Text elements** — titles, headers, section names, decorative text, restaurant name, taglines. Read the actual text from the menu.
-3. **Shape elements** — decorative rectangles, circles, lines, dividers, borders, colored sections/blocks
-4. **Data placeholders** — where menu items are listed (name + description + price). These become "data" elements with dataType="menuitem"
-5. **Image placeholders** — where photos or illustrations appear on the menu
+    zIndex++;
+    const id = uuidv4().slice(0, 8);
+    const base = {
+      id,
+      rotation: 0,
+      scaleX: 1,
+      scaleY: 1,
+      zIndex,
+      locked: false,
+      visible: true,
+      opacity: 1,
+    };
 
-## ELEMENT TYPES & REQUIRED FIELDS
-
-### Text Element (for titles, headers, decorative text)
-{
-  "id": "<unique-string>",
-  "type": "text",
-  "x": <number>,
-  "y": <number>,
-  "width": <number>,
-  "height": <number>,
-  "rotation": 0,
-  "scaleX": 1,
-  "scaleY": 1,
-  "zIndex": <number>,
-  "locked": false,
-  "visible": true,
-  "opacity": 1,
-  "content": "<the actual text>",
-  "fontSize": <number 20-200>,
-  "fontFamily": "Arial",
-  "fontWeight": "normal" | "bold",
-  "fontStyle": "normal",
-  "textDecoration": "none",
-  "fill": "<hex color>",
-  "stroke": "",
-  "strokeWidth": 0,
-  "align": "left" | "center" | "right",
-  "verticalAlign": "top",
-  "lineHeight": 1.2,
-  "letterSpacing": 0,
-  "padding": 0
-}
-
-### Shape Element (for decorative elements, dividers, colored blocks)
-{
-  "id": "<unique-string>",
-  "type": "shape",
-  "shapeType": "rectangle" | "circle" | "triangle",
-  "x": <number>,
-  "y": <number>,
-  "width": <number>,
-  "height": <number>,
-  "rotation": 0,
-  "scaleX": 1,
-  "scaleY": 1,
-  "zIndex": <number>,
-  "locked": false,
-  "visible": true,
-  "opacity": 1,
-  "fill": "<hex or rgba color>",
-  "stroke": "<hex color or empty>",
-  "strokeWidth": <number>,
-  "radius": <number for rounded corners>
-}
-
-### Data Element (placeholder for menu items — CRITICAL)
-{
-  "id": "<unique-string>",
-  "type": "data",
-  "dataType": "menuitem",
-  "x": <number>,
-  "y": <number>,
-  "width": <number>,
-  "height": <number>,
-  "rotation": 0,
-  "scaleX": 1,
-  "scaleY": 1,
-  "zIndex": <number>,
-  "locked": false,
-  "visible": true,
-  "opacity": 1,
-  "backgroundColor": "<hex color matching area background>",
-  "backgroundOpacity": 0,
-  "borderColor": "#000000",
-  "borderSize": 0,
-  "borderType": "solid",
-  "borderRadius": 0,
-  "textColor": "<hex color of menu item text>",
-  "fontSize": <number 30-60>,
-  "fontFamily": "Arial",
-  "fontWeight": "normal",
-  "lineSpacing": 1.5,
-  "itemNameLanguage": "en",
-  "showSubcategoryTitle": false,
-  "showMenuDescription": true,
-  "showPrice": true,
-  "showCurrencySign": true,
-  "priceColor": "<hex color>",
-  "priceFontFamily": "Arial",
-  "priceFontWeight": "bold",
-  "priceSeparator": ",",
-  "menuLayout": "left"
-}
-
-### Image Element (placeholder for photos/images on the menu)
-{
-  "id": "<unique-string>",
-  "type": "image",
-  "x": <number>,
-  "y": <number>,
-  "width": <number>,
-  "height": <number>,
-  "rotation": 0,
-  "scaleX": 1,
-  "scaleY": 1,
-  "zIndex": <number>,
-  "locked": false,
-  "visible": true,
-  "opacity": 1,
-  "fileName": "placeholder.jpg",
-  "src": "/placeholders/food.png",
-  "originalWidth": <same as width>,
-  "originalHeight": <same as height>
-}
-
-## LAYER ORGANIZATION
-Organize elements into logical layers:
-- "Background Shapes" layer — large colored rectangles/shapes that form the background structure
-- "Decorations" layer — dividers, lines, small decorative shapes
-- "Text" layer — all text elements (titles, headers)
-- "Menu Items" layer — data elements (menu item placeholders)
-- "Images" layer — image placeholders (only if the menu has photos)
-
-## JSON STRUCTURE TO RETURN
-{
-  "id": "<random-id>",
-  "name": "<restaurant name or 'Menu Template'>",
-  "createdAt": "<ISO timestamp>",
-  "updatedAt": "<ISO timestamp>",
-  "pages": [
-    {
-      "id": "<random-id>",
-      "name": "Page 1",
-      "format": {
-        "name": "${pageFormat}",
-        "width": ${dimensions.width},
-        "height": ${dimensions.height},
-        "printWidth": ${dimensions.printWidth},
-        "printHeight": ${dimensions.printHeight}
-      },
-      "backgroundColor": "<detected background color>",
-      "layers": [ ...layers with elements... ]
+    if (tag.type === "SHAPE") {
+      shapes.push({
+        ...base,
+        type: "shape",
+        shapeType: tag.shape === "rect" ? "rectangle" : tag.shape,
+        x: tag.x,
+        y: tag.y,
+        width: tag.w,
+        height: tag.h,
+        fill: tag.fill,
+        stroke: tag.stroke || "",
+        strokeWidth: tag.strokeWidth || 0,
+        radius: tag.radius || 0,
+        opacity: tag.opacity ?? 1,
+      });
+    } else if (tag.type === "TEXT") {
+      texts.push({
+        ...base,
+        type: "text",
+        x: tag.x,
+        y: tag.y,
+        width: tag.w,
+        height: tag.h,
+        content: tag.content,
+        fontSize: tag.size,
+        fontFamily: "Arial",
+        fontWeight: tag.weight || "normal",
+        fontStyle: tag.style || "normal",
+        textDecoration: "none",
+        fill: tag.fill,
+        stroke: "",
+        strokeWidth: 0,
+        align: tag.align || "left",
+        verticalAlign: "top",
+        lineHeight: 1.2,
+        letterSpacing: 0,
+        padding: 0,
+      });
+    } else if (tag.type === "DATA") {
+      dataEls.push({
+        ...base,
+        type: "data",
+        dataType: "menuitem",
+        x: tag.x,
+        y: tag.y,
+        width: tag.w,
+        height: tag.h,
+        backgroundColor: tag.bgColor || bgColor,
+        backgroundOpacity: 0,
+        borderColor: "#000000",
+        borderSize: 0,
+        borderType: "solid",
+        borderRadius: 0,
+        textColor: tag.textColor || "#000000",
+        fontSize: tag.fontSize || 40,
+        fontFamily: "Arial",
+        fontWeight: "normal",
+        lineSpacing: 1.5,
+        itemNameLanguage: "en",
+        showSubcategoryTitle: false,
+        showMenuDescription: true,
+        showPrice: true,
+        showCurrencySign: true,
+        priceColor: tag.textColor || "#000000",
+        priceFontFamily: "Arial",
+        priceFontWeight: "bold",
+        priceSeparator: ",",
+        menuLayout: "left",
+      });
+    } else if (tag.type === "IMAGE") {
+      images.push({
+        ...base,
+        type: "image",
+        x: tag.x,
+        y: tag.y,
+        width: tag.w,
+        height: tag.h,
+        fileName: "placeholder.jpg",
+        src: "/placeholders/food.png",
+        originalWidth: tag.w,
+        originalHeight: tag.h,
+      });
     }
-  ],
-  "fonts": {
-    "defaultFonts": [],
-    "customFonts": [],
-    "googleFonts": [],
-    "loadedFonts": []
-  },
-  "settings": {
-    "defaultFormat": "${pageFormat}",
-    "zoom": 0.3
   }
+
+  // Build layers (only include non-empty ones)
+  const layers: any[] = [];
+  const addLayer = (name: string, elements: any[]) => {
+    if (elements.length === 0) return;
+    layers.push({
+      id: uuidv4().slice(0, 8),
+      name,
+      visible: true,
+      locked: false,
+      opacity: 1,
+      elements,
+    });
+  };
+
+  addLayer("Background Shapes", shapes);
+  addLayer("Text", texts);
+  addLayer("Menu Items", dataEls);
+  addLayer("Images", images);
+
+  const now = new Date().toISOString();
+  const projectId = uuidv4().slice(0, 12);
+
+  return {
+    id: projectId,
+    name: restaurantName || "Menu Template",
+    createdAt: now,
+    updatedAt: now,
+    pages: [
+      {
+        id: uuidv4().slice(0, 8),
+        name: "Page 1",
+        format: {
+          name: pageFormat,
+          width: dim.width,
+          height: dim.height,
+          printWidth: dim.printWidth,
+          printHeight: dim.printHeight,
+        },
+        backgroundColor: bgColor,
+        layers,
+      },
+    ],
+    fonts: {
+      defaultFonts: [],
+      customFonts: [],
+      googleFonts: [],
+      loadedFonts: [],
+    },
+    settings: {
+      defaultFormat: pageFormat,
+      zoom: 0.3,
+    },
+  };
 }
 
-## CRITICAL: BE THOROUGH
-- You MUST capture EVERY visual section of the menu — do NOT skip sections or summarize
-- Complex menus may have 6+ sections, multiple columns, side panels — recreate ALL of them
-- Each menu section header (e.g. "Nos entrées", "Nos plats", "Nos desserts") needs its own text element
-- Each group of menu items needs its own data element positioned in the correct area
-- Colored panels/boxes need shape elements with the correct fill color
-- A complex menu should generate 15-30+ elements — if you're generating fewer than 10, you're missing content
+// ---------------------------------------------------------------------------
+// Main function: GPT Vision → tags → MenuProject
+// ---------------------------------------------------------------------------
 
-## IMPORTANT GUIDELINES
-- Generate UNIQUE ids for every element (use random alphanumeric strings like "a1b2c3d4e")
-- Use realistic font sizes: titles 80-150px, section headers 50-80px, body text 35-50px (on the ${dimensions.width}×${dimensions.height} canvas)
-- Detect colors from the menu photo — use the actual color scheme, not generic ones
-- Position data elements precisely where menu items appear — estimate the bounding box of each menu section
-- For horizontal divider lines, use a rectangle shape with a very small height (5-15px) and full width
-- For multi-column layouts, create separate data elements for each column
-- For colored panels/sidebars, create rectangle shapes with the correct background color
-- If the menu has multiple columns, create separate data elements for each column
-- The "fonts.loadedFonts" must be an empty array [] (not a Set)
-- Only use system fonts: Arial, Helvetica, Times New Roman, Georgia, Verdana, Tahoma, Trebuchet MS, Courier New
-- All element ids must be unique strings`;
-}
-
-/**
- * Call GPT-4o Vision to analyze a menu photo and generate a MenuProject JSON.
- */
 export async function generateMenuTemplate(
   imageBase64: string,
   restaurantName?: string,
   pageFormat: "A4" | "A5" = "A4"
 ): Promise<object> {
-  const systemPrompt = buildSystemPrompt(pageFormat);
+  const systemPrompt = buildTagPrompt(pageFormat);
 
   const userMessage = restaurantName
-    ? `Analyze this restaurant menu photo for "${restaurantName}" and generate the MenuProject JSON template. Recreate the layout, colors, typography, and structure as accurately as possible.`
-    : `Analyze this restaurant menu photo and generate the MenuProject JSON template. Recreate the layout, colors, typography, and structure as accurately as possible.`;
+    ? `Analyze this restaurant menu photo for "${restaurantName}". Output ALL visual elements as tags.`
+    : `Analyze this restaurant menu photo. Output ALL visual elements as tags.`;
 
   const response = await openaiClient.chat.completions.create({
     model: "gpt-4o",
     messages: [
-      {
-        role: "system",
-        content: systemPrompt,
-      },
+      { role: "system", content: systemPrompt },
       {
         role: "user",
         content: [
-          {
-            type: "text",
-            text: userMessage,
-          },
+          { type: "text", text: userMessage },
           {
             type: "image_url",
             image_url: {
@@ -331,8 +441,8 @@ export async function generateMenuTemplate(
         ],
       },
     ],
-    max_tokens: 16384,
-    temperature: 0.3,
+    max_tokens: 4096,
+    temperature: 0.2,
   });
 
   const content = response.choices[0]?.message?.content;
@@ -340,92 +450,28 @@ export async function generateMenuTemplate(
     throw new Error("GPT returned empty response");
   }
 
-  // Extract JSON from GPT response — handles preamble text, code fences, etc.
-  let jsonStr = extractJSON(content);
+  // Log the raw tags for debugging
+  const tagLines = content.trim().split("\n").filter((l) => l.trim().startsWith("["));
+  console.log(`[GPT] Received ${tagLines.length} tags`);
 
-  // Parse and validate
-  let parsed: any;
-  try {
-    parsed = JSON.parse(jsonStr);
-  } catch (e) {
-    console.error("[GPT] Failed to parse JSON response:", jsonStr.substring(0, 500));
-    // If JSON is truncated (token limit), try to repair it
-    const repaired = tryRepairJSON(jsonStr);
-    if (repaired) {
-      console.log("[GPT] Repaired truncated JSON successfully");
-      parsed = repaired;
-    } else {
-      throw new Error(`GPT returned invalid JSON: ${(e as Error).message}`);
+  // Check for refusal
+  if (content.includes("I'm unable") || content.includes("I cannot")) {
+    // Check if there are still some tags in the response
+    if (tagLines.length < 3) {
+      throw new Error("GPT was unable to analyze this image. Make sure the photo shows a restaurant menu.");
     }
   }
 
-  // Basic structural validation
-  if (!parsed.id || !parsed.pages || !Array.isArray(parsed.pages) || parsed.pages.length === 0) {
-    throw new Error("GPT response missing required fields (id, pages)");
+  // Parse tags
+  const tags = parseTags(content);
+  console.log(`[GPT] Parsed ${tags.length} valid tags: ${tags.filter(t => t.type === "SHAPE").length} shapes, ${tags.filter(t => t.type === "TEXT").length} texts, ${tags.filter(t => t.type === "DATA").length} data, ${tags.filter(t => t.type === "IMAGE").length} images`);
+
+  if (tags.length < 2) {
+    throw new Error("GPT returned too few elements. The image may not be a readable menu photo.");
   }
 
-  const page = parsed.pages[0];
-  if (!page.id || !page.format || !page.layers || !Array.isArray(page.layers)) {
-    throw new Error("GPT response page missing required fields (id, format, layers)");
-  }
+  // Build MenuProject JSON from tags
+  const project = buildMenuProject(tags, restaurantName, pageFormat);
 
-  // Fix: GPT sometimes puts elements directly in the layers array
-  // instead of wrapping them in proper layer objects with { id, name, elements: [...] }
-  for (const pg of parsed.pages) {
-    if (Array.isArray(pg.layers) && pg.layers.length > 0) {
-      const firstLayer = pg.layers[0];
-      // Check if layers contains raw elements instead of layer objects
-      if (firstLayer.type && !firstLayer.elements) {
-        // Elements are flat in the layers array — regroup by type into proper layers
-        const elements = pg.layers as any[];
-        const grouped: Record<string, any[]> = {};
-        for (const el of elements) {
-          const layerName =
-            el.type === "shape" ? "Shapes" :
-            el.type === "text" ? "Text" :
-            el.type === "data" ? "Menu Items" :
-            el.type === "image" ? "Images" :
-            el.type === "background" ? "Background" : "Other";
-          if (!grouped[layerName]) grouped[layerName] = [];
-          grouped[layerName].push(el);
-        }
-        pg.layers = Object.entries(grouped).map(([name, els], i) => ({
-          id: `layer-${i + 1}-${Date.now()}`,
-          name,
-          visible: true,
-          locked: false,
-          opacity: 1,
-          elements: els,
-        }));
-        console.log(`[GPT] Fixed flat layers → ${pg.layers.length} grouped layers (${elements.length} elements)`);
-      }
-    }
-  }
-
-  // Ensure fonts.loadedFonts is an array (GPT might output a Set)
-  if (parsed.fonts) {
-    if (
-      parsed.fonts.loadedFonts &&
-      !Array.isArray(parsed.fonts.loadedFonts)
-    ) {
-      parsed.fonts.loadedFonts = [];
-    }
-  } else {
-    parsed.fonts = {
-      defaultFonts: [],
-      customFonts: [],
-      googleFonts: [],
-      loadedFonts: [],
-    };
-  }
-
-  // Ensure settings exist
-  if (!parsed.settings) {
-    parsed.settings = {
-      defaultFormat: pageFormat,
-      zoom: 0.3,
-    };
-  }
-
-  return parsed;
+  return project;
 }
