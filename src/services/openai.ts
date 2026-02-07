@@ -10,6 +10,80 @@ export const openaiClient = new OpenAI({
 });
 
 /**
+ * Extract JSON from GPT response that may contain preamble text,
+ * markdown code fences, or explanations before/after the JSON.
+ */
+function extractJSON(raw: string): string {
+  let s = raw.trim();
+
+  // 1. Try extracting from markdown code fences
+  const fenceMatch = s.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+  if (fenceMatch) {
+    s = fenceMatch[1].trim();
+    return s;
+  }
+
+  // 2. Try to find the first { and last } — the JSON object
+  const firstBrace = s.indexOf("{");
+  const lastBrace = s.lastIndexOf("}");
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    s = s.substring(firstBrace, lastBrace + 1);
+    return s;
+  }
+
+  // 3. If we only have an opening brace (truncated), return from there
+  if (firstBrace !== -1) {
+    s = s.substring(firstBrace);
+    return s;
+  }
+
+  // 4. Return as-is — let the parser fail with a clear error
+  return s;
+}
+
+/**
+ * Try to repair truncated JSON by closing open brackets/braces.
+ * Works when GPT hit the token limit mid-output.
+ */
+function tryRepairJSON(jsonStr: string): any | null {
+  try {
+    // Count unclosed brackets
+    let braces = 0;
+    let brackets = 0;
+    let inString = false;
+    let escape = false;
+
+    for (const ch of jsonStr) {
+      if (escape) { escape = false; continue; }
+      if (ch === "\\") { escape = true; continue; }
+      if (ch === '"') { inString = !inString; continue; }
+      if (inString) continue;
+      if (ch === "{") braces++;
+      if (ch === "}") braces--;
+      if (ch === "[") brackets++;
+      if (ch === "]") brackets--;
+    }
+
+    if (braces <= 0 && brackets <= 0) return null; // Not a truncation issue
+
+    // Close any open string
+    let repaired = jsonStr;
+    if (inString) repaired += '"';
+
+    // Remove trailing comma/colon that would be invalid
+    repaired = repaired.replace(/[,:\s]+$/, "");
+
+    // Close open brackets and braces
+    for (let i = 0; i < brackets; i++) repaired += "]";
+    for (let i = 0; i < braces; i++) repaired += "}";
+
+    return JSON.parse(repaired);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Build the system prompt for menu template generation.
  * This is the most critical piece — it tells GPT-4o Vision exactly
  * what JSON structure to produce for a MenuProject.
@@ -197,12 +271,22 @@ Organize elements into logical layers:
   }
 }
 
+## CRITICAL: BE THOROUGH
+- You MUST capture EVERY visual section of the menu — do NOT skip sections or summarize
+- Complex menus may have 6+ sections, multiple columns, side panels — recreate ALL of them
+- Each menu section header (e.g. "Nos entrées", "Nos plats", "Nos desserts") needs its own text element
+- Each group of menu items needs its own data element positioned in the correct area
+- Colored panels/boxes need shape elements with the correct fill color
+- A complex menu should generate 15-30+ elements — if you're generating fewer than 10, you're missing content
+
 ## IMPORTANT GUIDELINES
 - Generate UNIQUE ids for every element (use random alphanumeric strings like "a1b2c3d4e")
 - Use realistic font sizes: titles 80-150px, section headers 50-80px, body text 35-50px (on the ${dimensions.width}×${dimensions.height} canvas)
 - Detect colors from the menu photo — use the actual color scheme, not generic ones
 - Position data elements precisely where menu items appear — estimate the bounding box of each menu section
 - For horizontal divider lines, use a rectangle shape with a very small height (5-15px) and full width
+- For multi-column layouts, create separate data elements for each column
+- For colored panels/sidebars, create rectangle shapes with the correct background color
 - If the menu has multiple columns, create separate data elements for each column
 - The "fonts.loadedFonts" must be an empty array [] (not a Set)
 - Only use system fonts: Arial, Helvetica, Times New Roman, Georgia, Verdana, Tahoma, Trebuchet MS, Courier New
@@ -247,7 +331,7 @@ export async function generateMenuTemplate(
         ],
       },
     ],
-    max_tokens: 16000,
+    max_tokens: 16384,
     temperature: 0.3,
   });
 
@@ -256,11 +340,8 @@ export async function generateMenuTemplate(
     throw new Error("GPT returned empty response");
   }
 
-  // Strip any markdown code fences if GPT added them
-  let jsonStr = content.trim();
-  if (jsonStr.startsWith("```")) {
-    jsonStr = jsonStr.replace(/^```(?:json)?\n?/, "").replace(/\n?```$/, "");
-  }
+  // Extract JSON from GPT response — handles preamble text, code fences, etc.
+  let jsonStr = extractJSON(content);
 
   // Parse and validate
   let parsed: any;
@@ -268,7 +349,14 @@ export async function generateMenuTemplate(
     parsed = JSON.parse(jsonStr);
   } catch (e) {
     console.error("[GPT] Failed to parse JSON response:", jsonStr.substring(0, 500));
-    throw new Error(`GPT returned invalid JSON: ${(e as Error).message}`);
+    // If JSON is truncated (token limit), try to repair it
+    const repaired = tryRepairJSON(jsonStr);
+    if (repaired) {
+      console.log("[GPT] Repaired truncated JSON successfully");
+      parsed = repaired;
+    } else {
+      throw new Error(`GPT returned invalid JSON: ${(e as Error).message}`);
+    }
   }
 
   // Basic structural validation
