@@ -53,7 +53,9 @@
     if (p == null || p === "") return "";
     var n = parseFloat(p);
     if (isNaN(n)) return esc(String(p));
-    return "€\u00A0" + n.toFixed(2).replace(/\.00$/, "");
+    // Belgian format: comma decimal separator (€ 14,50 not €14.50)
+    var formatted = n.toFixed(2).replace(".", ",").replace(/,00$/, "");
+    return "€\u00A0" + formatted;
   }
 
   function detectLangFromURL() {
@@ -74,6 +76,10 @@
     noItems: { nl: "Geen items", fr: "Aucun article", en: "No items" },
     allergens: { nl: "Allergenen", fr: "Allergènes", en: "Allergens" },
     supplements: { nl: "Supplementen", fr: "Suppléments", en: "Supplements" },
+    lastUpdated: { nl: "Laatst bijgewerkt", fr: "Dernière mise à jour", en: "Last updated" },
+    dailySpecials: { nl: "Suggestie van de dag", fr: "Suggestion du jour", en: "Daily Special" },
+    unavailable: { nl: "Niet beschikbaar", fr: "Non disponible", en: "Unavailable" },
+    poweredBy: { nl: "Menu door", fr: "Menu par", en: "Menu by" },
   };
 
   function uiStr(key, lang) {
@@ -212,6 +218,31 @@
 .adamenu-supp-title { font-size:.9rem; font-weight:700; color:" + primary + "; margin-bottom:.6rem; }\n\
 .adamenu-supp-base { font-size:.8rem; font-style:italic; color:" + textMuted + "; margin-bottom:.5rem; }\n\
 \n\
+/* ── Last Updated Footer ── */\n\
+.adamenu-footer { text-align:center; padding:1.5rem; font-size:.75rem; color:" + textMuted + "; border-top:1px solid " + borderColor + "; margin-top:1.5rem; }\n\
+\n\
+/* ── 86'd / Unavailable items ── */\n\
+.adamenu-item.adamenu-item-86d { opacity:.5; }\n\
+.adamenu-item-86d .adamenu-item-price { text-decoration:line-through; }\n\
+.adamenu-86-badge { display:inline-block; padding:.1rem .4rem; font-size:.65rem; background:#ef4444; color:white; border-radius:4px; font-weight:700; margin-left:.4rem; }\n\
+\n\
+/* ── Daily Specials ── */\n\
+.adamenu-specials { margin:0 1.5rem 1.5rem; padding:1.25rem; border:2px solid " + primary + "; border-radius:12px; background:" + primary + "08; }\n\
+.adamenu-specials-title { font-size:1.1rem; font-weight:700; color:" + primary + "; margin-bottom:.75rem; text-align:center; }\n\
+\n\
+/* ── Print stylesheet ── */\n\
+@media print {\n\
+  .adamenu-topbar, .adamenu-mobile-sel, .adamenu-dropdown, .adamenu-tabs, .adamenu-footer { display:none !important; }\n\
+  .adamenu-subcats { display:block !important; }\n\
+  .adamenu-subcat { break-inside:avoid; page-break-inside:avoid; border:1px solid #ccc !important; margin-bottom:1rem !important; }\n\
+  .adamenu-item:hover { background:none !important; }\n\
+  .adamenu { background:white !important; color:black !important; }\n\
+  .adamenu-cat-title, .adamenu-subcat-title { color:black !important; }\n\
+  .adamenu-item-price { color:black !important; font-weight:bold !important; }\n\
+  .adamenu-allergen { background:#eee !important; color:#333 !important; }\n\
+  .adamenu-specials { border-color:#333 !important; background:white !important; }\n\
+}\n\
+\n\
 /* ── Responsive ── */\n\
 @media(max-width:920px) {\n\
   .adamenu-tabs { display:none; }\n\
@@ -227,6 +258,61 @@
   .adamenu-subcat { padding:1rem; }\n\
 }\n\
 ";
+  }
+
+  // ── JSON-LD Structured Data for SEO ──
+  function injectStructuredData(config, menuData, lang) {
+    // Remove any existing Adamenu structured data
+    var existing = document.querySelector('script[data-adamenu-jsonld]');
+    if (existing) existing.parentNode.removeChild(existing);
+
+    var restaurantName = config.name || config.slug || SLUG;
+    var categories = menuData
+      .filter(function(c) { return !c.hidden; })
+      .sort(function(a, b) { return (a.order || 0) - (b.order || 0); });
+
+    var menuSections = categories.map(function(cat) {
+      var items = [];
+      (cat.subCategories || []).forEach(function(sub) {
+        (sub.menuItems || []).forEach(function(item) {
+          if (!item.hidden) {
+            var menuItem = {
+              "@type": "MenuItem",
+              "name": t(item.names, lang) || item.name || "",
+              "offers": {
+                "@type": "Offer",
+                "price": item.price,
+                "priceCurrency": "EUR"
+              }
+            };
+            var desc = t(item.descriptions, lang);
+            if (desc) menuItem.description = desc;
+            items.push(menuItem);
+          }
+        });
+      });
+      return {
+        "@type": "MenuSection",
+        "name": t(cat.names, lang),
+        "hasMenuItem": items
+      };
+    });
+
+    var schema = {
+      "@context": "https://schema.org",
+      "@type": "Restaurant",
+      "name": restaurantName,
+      "hasMenu": {
+        "@type": "Menu",
+        "hasMenuSection": menuSections
+      }
+    };
+
+    var scriptTag = document.createElement("script");
+    scriptTag.type = "application/ld+json";
+    scriptTag.setAttribute("data-adamenu-jsonld", "true");
+    scriptTag.textContent = JSON.stringify(schema);
+    document.head.appendChild(scriptTag);
   }
 
   // ── SVG icons ──
@@ -493,11 +579,11 @@
       var wrap = document.createElement("div");
       wrap.className = "adamenu-supplements";
 
-      // Special "base" text for pizza subcategory
-      if (subId === "a1426770-286d-4f22-9d09-a8d9fc911a58") {
+      // Show base text if configured for this subcategory (no more hardcoded IDs)
+      if (suppConfig.baseText) {
         var baseP = document.createElement("div");
         baseP.className = "adamenu-supp-base";
-        baseP.textContent = "Base: Pomodoro, mozzarella e origano";
+        baseP.textContent = t(suppConfig.baseText, lang) || suppConfig.baseText;
         wrap.appendChild(baseP);
       }
 
@@ -554,6 +640,14 @@
       showCategory(currentCat);
     }
 
+    // ── Last Updated Footer ──
+    var footer = document.createElement("div");
+    footer.className = "adamenu-footer";
+    var lastUpdatedDate = config.lastUpdatedAt ? new Date(config.lastUpdatedAt) : new Date();
+    var dateLocale = lang === "nl" ? "nl-BE" : lang === "fr" ? "fr-BE" : "en-GB";
+    footer.textContent = uiStr("lastUpdated", lang) + ": " + lastUpdatedDate.toLocaleDateString(dateLocale, { day: "numeric", month: "long", year: "numeric" });
+    wrapper.appendChild(footer);
+
     // ── Mount ──
     root.innerHTML = "";
     root.appendChild(wrapper);
@@ -585,6 +679,12 @@
         var config = data.restaurant || {};
         var menuData = data.menu || [];
 
+        // Cache in localStorage for offline fallback
+        try {
+          localStorage.setItem("adamenu-cache-" + SLUG, JSON.stringify(data));
+          localStorage.setItem("adamenu-cache-ts-" + SLUG, Date.now().toString());
+        } catch(e) { /* localStorage full or unavailable — ignore */ }
+
         // Resolve language: data-lang > URL detect > restaurant default > nl
         var lang = ATTR_LANG || detectLangFromURL() || config.defaultLanguage || "nl";
 
@@ -592,9 +692,28 @@
         styleEl.textContent = buildCSS(config.theme || {});
 
         renderMenu(contentRoot, config, menuData, lang);
+
+        // Inject SEO structured data into main document
+        injectStructuredData(config, menuData, lang);
       })
       .catch(function (err) {
         console.error("[AdaMenu] Failed to load menu:", err);
+
+        // Try localStorage offline cache before showing error
+        try {
+          var cachedStr = localStorage.getItem("adamenu-cache-" + SLUG);
+          if (cachedStr) {
+            var cachedData = JSON.parse(cachedStr);
+            var config = cachedData.restaurant || {};
+            var menuData = cachedData.menu || [];
+            var lang = ATTR_LANG || detectLangFromURL() || config.defaultLanguage || "nl";
+            styleEl.textContent = buildCSS(config.theme || {});
+            renderMenu(contentRoot, config, menuData, lang);
+            console.log("[AdaMenu] Serving from offline cache");
+            return;
+          }
+        } catch(e) { /* cache parse error — fall through to error */ }
+
         styleEl.textContent = buildCSS({});
         renderError(contentRoot, tempLang, function () {
           // Clear shadow DOM and re-boot

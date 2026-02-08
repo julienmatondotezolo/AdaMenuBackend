@@ -18,6 +18,7 @@ export interface RestaurantConfig {
 
 export interface SupplementConfig {
   title: Record<string, string>;
+  baseText?: Record<string, string>;
   items: Array<{
     name: string;
     descriptions: Record<string, string>;
@@ -90,6 +91,7 @@ export const restaurants: Record<string, RestaurantConfig> = {
       "a1426770-286d-4f22-9d09-a8d9fc911a58": {
         // Pizze
         title: { nl: "Supplementen", fr: "Suppléments", en: "Supplements" },
+        baseText: { nl: "Base: Pomodoro, mozzarella e origano", fr: "Base: Pomodoro, mozzarella e origano", en: "Base: Pomodoro, mozzarella e origano" },
         items: [
           {
             name: "parma / salame / spek / ananas / gorgonzola",

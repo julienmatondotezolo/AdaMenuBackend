@@ -2,44 +2,65 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import dotenv from "dotenv";
+
 import menuRoutes from "./routes/menu";
 import widgetRoutes from "./routes/widget";
+import v1Routes from "./routes/v1";
+import { errorHandler } from "./middleware/error-handler";
+import { requestLogger } from "./middleware/request-logger";
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3002;
+const startTime = Date.now();
 
-// CORS configuration — allow any origin for the widget endpoints
+// ─── CORS ──────────────────────────────────────────────────────────────────
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())
+  : undefined; // undefined = allow all
+
 app.use(
   cors({
-    origin: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    origin: allowedOrigins || true,
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-API-Key"],
+    credentials: true,
   })
 );
 
-// Body parser with 500MB limit
-app.use(express.json({ limit: "500mb" }));
-app.use(express.urlencoded({ extended: true, limit: "500mb" }));
+// ─── Body parsers ──────────────────────────────────────────────────────────
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
-// Serve static files (widget.js, etc.)
+// ─── Request logging ───────────────────────────────────────────────────────
+app.use(requestLogger);
+
+// ─── Serve static files (widget.js, widget-test.html) ──────────────────────
 app.use(express.static(path.join(__dirname, "../public")));
 
-// Routes
-app.use("/api/menu", menuRoutes);
-app.use("/api/widget", widgetRoutes);
-
-// Health check
+// ─── Health check ──────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
     service: "adamenu-backend",
+    version: "1.0.0",
+    uptime: Math.floor((Date.now() - startTime) / 1000),
     timestamp: new Date().toISOString(),
   });
 });
 
-// EPIPE / ECONNRESET error handlers
+// ─── V1 API routes (multi-tenant CRUD + public menu) ───────────────────────
+app.use("/api/v1", v1Routes);
+
+// ─── Legacy routes ─────────────────────────────────────────────────────────
+app.use("/api/menu", menuRoutes);
+app.use("/api/widget", widgetRoutes);
+
+// ─── Global error handler (must be last) ───────────────────────────────────
+app.use(errorHandler);
+
+// ─── Process-level error handling ──────────────────────────────────────────
 process.on("uncaughtException", (err: NodeJS.ErrnoException) => {
   if (err.code === "EPIPE" || err.code === "ECONNRESET") {
     console.warn(`[WARN] ${err.code} — client disconnected, ignoring.`);
@@ -53,9 +74,12 @@ process.on("unhandledRejection", (reason) => {
   console.error("[FATAL] Unhandled rejection:", reason);
 });
 
+// ─── Start server ──────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`🍽️  AdaMenu backend running on http://localhost:${PORT}`);
-  console.log(`   Health: http://localhost:${PORT}/health`);
+  console.log(`   Health:  http://localhost:${PORT}/health`);
+  console.log(`   API:     http://localhost:${PORT}/api/v1`);
+  console.log(`   Widget:  http://localhost:${PORT}/widget-test.html`);
 });
 
 export default app;
