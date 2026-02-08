@@ -93,6 +93,19 @@ export const updateSubcategorySchema = z.object({
 });
 
 // ============================================================================
+// Menu item variant schema
+// ============================================================================
+
+export const menuItemVariantSchema = z.object({
+  label: multiLangTextSchema, // { nl: "Klein", fr: "Petit", en: "Small" }
+  price: z.number().min(0),
+  price_takeaway: z.number().min(0).optional().nullable(),
+  vat_rate: z.number().min(0).max(100).default(12),
+  vat_rate_takeaway: z.number().min(0).max(100).default(6).optional(),
+  available: z.boolean().optional().default(true),
+});
+
+// ============================================================================
 // Menu item schemas
 // ============================================================================
 
@@ -101,8 +114,13 @@ export const createMenuItemSchema = z.object({
   name: multiLangTextSchema,
   description: optionalMultiLangTextSchema,
   price: z.number().min(0),
+  price_takeaway: z.number().min(0).optional().nullable(),
+  vat_rate: z.number().min(0).max(100).default(12), // Belgian VAT: 6%, 12%, 21%
+  vat_rate_takeaway: z.number().min(0).max(100).default(6).optional(),
   image_url: z.string().url().optional().nullable(),
   available: z.boolean().optional().default(true),
+  has_variants: z.boolean().optional().default(false),
+  variants: z.array(menuItemVariantSchema).optional(),
   allergen_ids: z.array(uuidSchema).optional(),
   side_dish_ids: z.array(uuidSchema).optional(),
   supplement_ids: z.array(uuidSchema).optional(),
@@ -113,11 +131,19 @@ export const updateMenuItemSchema = z.object({
   name: optionalMultiLangTextSchema,
   description: optionalMultiLangTextSchema,
   price: z.number().min(0).optional(),
+  price_takeaway: z.number().min(0).optional().nullable(),
+  vat_rate: z.number().min(0).max(100).optional(),
+  vat_rate_takeaway: z.number().min(0).max(100).optional().nullable(),
   image_url: z.string().url().optional().nullable(),
   available: z.boolean().optional(),
+  has_variants: z.boolean().optional(),
+  variants: z.array(menuItemVariantSchema).optional(),
   allergen_ids: z.array(uuidSchema).optional(),
   side_dish_ids: z.array(uuidSchema).optional(),
   supplement_ids: z.array(uuidSchema).optional(),
+  // 86-ing
+  is_86d: z.boolean().optional(),
+  eighty_sixed_until: z.string().datetime().optional().nullable(),
 });
 
 export const bulkMenuItemSchema = z.object({
@@ -128,13 +154,57 @@ export const bulkMenuItemSchema = z.object({
       name: optionalMultiLangTextSchema,
       description: optionalMultiLangTextSchema,
       price: z.number().min(0).optional(),
+      price_takeaway: z.number().min(0).optional().nullable(),
+      vat_rate: z.number().min(0).max(100).optional(),
+      vat_rate_takeaway: z.number().min(0).max(100).optional().nullable(),
       image_url: z.string().url().optional().nullable(),
       available: z.boolean().optional(),
+      has_variants: z.boolean().optional(),
+      variants: z.array(menuItemVariantSchema).optional(),
       allergen_ids: z.array(uuidSchema).optional(),
       side_dish_ids: z.array(uuidSchema).optional(),
       supplement_ids: z.array(uuidSchema).optional(),
     })
   ).min(1).max(100),
+});
+
+// ============================================================================
+// 86-ing schema
+// ============================================================================
+
+export const eightySixSchema = z.object({
+  is_86d: z.boolean(),
+  eighty_sixed_until: z.string().datetime().optional().nullable(),
+});
+
+// ============================================================================
+// Daily Specials schemas
+// ============================================================================
+
+export const createDailySpecialSchema = z.object({
+  name: multiLangTextSchema,
+  description: optionalMultiLangTextSchema,
+  price: z.number().min(0),
+  vat_rate: z.number().min(0).max(100).default(12),
+  image_url: z.string().url().optional().nullable(),
+  date_from: z.string(), // ISO date
+  date_to: z.string(),
+  recurring_day: z.number().int().min(0).max(6).optional().nullable(),
+  available: z.boolean().optional().default(true),
+  allergen_ids: z.array(uuidSchema).optional(),
+});
+
+export const updateDailySpecialSchema = z.object({
+  name: optionalMultiLangTextSchema,
+  description: optionalMultiLangTextSchema,
+  price: z.number().min(0).optional(),
+  vat_rate: z.number().min(0).max(100).optional(),
+  image_url: z.string().url().optional().nullable(),
+  date_from: z.string().optional(),
+  date_to: z.string().optional(),
+  recurring_day: z.number().int().min(0).max(6).optional().nullable(),
+  available: z.boolean().optional(),
+  allergen_ids: z.array(uuidSchema).optional(),
 });
 
 // ============================================================================

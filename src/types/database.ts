@@ -184,7 +184,9 @@ export interface PublicMenuResponse {
   restaurant: Pick<
     Restaurant,
     "name" | "slug" | "logo_url" | "primary_color" | "accent_color" | "font_family" | "languages" | "default_language"
-  >;
+  > & {
+    last_updated_at: string;
+  };
   categories: CategoryWithFullMenu[];
 }
 

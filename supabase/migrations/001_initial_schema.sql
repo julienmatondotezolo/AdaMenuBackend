@@ -102,6 +102,12 @@ CREATE TABLE menu_items (
   image_url       TEXT,
   available       BOOLEAN NOT NULL DEFAULT true,
   sort_order      INT NOT NULL DEFAULT 0,
+  has_variants    BOOLEAN NOT NULL DEFAULT false,
+  variants        JSONB DEFAULT '[]',
+  is_86d          BOOLEAN NOT NULL DEFAULT false,
+  eighty_sixed_at TIMESTAMPTZ,
+  eighty_sixed_until TIMESTAMPTZ,
+  deleted_at      TIMESTAMPTZ,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );

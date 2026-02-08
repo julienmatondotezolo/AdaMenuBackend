@@ -101,6 +101,9 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
     if (catError) throw catError;
 
     // 3. Transform the nested data into the public response shape
+    // Track last update time across all items for "last updated" display
+    let lastUpdatedAt: string | null = null;
+
     const transformedCategories = (categories || []).map((cat: Record<string, unknown>) => ({
       id: cat.id as string,
       name: cat.name as Record<string, string>,
@@ -114,24 +117,38 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
           name: sub.name as Record<string, string>,
           sort_order: sub.sort_order as number,
           items: ((sub.menu_items as Record<string, unknown>[]) || [])
-            .filter((item) => item.available !== false)
+            .filter((item) => {
+              // Filter out unavailable items AND currently 86'd items
+              if (item.available === false) return false;
+              if ((item as any).is_86d === true) return false;
+              if ((item as any).deleted_at) return false;
+              return true;
+            })
             .sort((a, b) => (a.sort_order as number) - (b.sort_order as number))
-            .map((item) => ({
-              id: item.id as string,
-              name: item.name as Record<string, string>,
-              description: item.description as Record<string, string>,
-              price: item.price as number,
-              image_url: item.image_url as string | null,
-              allergens: ((item.menu_item_allergens as Record<string, unknown>[]) || [])
-                .map((j) => j.allergen)
-                .filter(Boolean),
-              side_dishes: ((item.menu_item_side_dishes as Record<string, unknown>[]) || [])
-                .map((j) => j.side_dish)
-                .filter(Boolean),
-              supplements: ((item.menu_item_supplements as Record<string, unknown>[]) || [])
-                .map((j) => j.supplement)
-                .filter(Boolean),
-            })),
+            .map((item) => {
+              // Track most recent update for "last updated" timestamp
+              const updatedAt = (item as any).updated_at as string | undefined;
+              if (updatedAt && (!lastUpdatedAt || updatedAt > lastUpdatedAt)) {
+                lastUpdatedAt = updatedAt;
+              }
+
+              return {
+                id: item.id as string,
+                name: item.name as Record<string, string>,
+                description: item.description as Record<string, string>,
+                price: item.price as number,
+                image_url: item.image_url as string | null,
+                allergens: ((item.menu_item_allergens as Record<string, unknown>[]) || [])
+                  .map((j) => j.allergen)
+                  .filter(Boolean),
+                side_dishes: ((item.menu_item_side_dishes as Record<string, unknown>[]) || [])
+                  .map((j) => j.side_dish)
+                  .filter(Boolean),
+                supplements: ((item.menu_item_supplements as Record<string, unknown>[]) || [])
+                  .map((j) => j.supplement)
+                  .filter(Boolean),
+              };
+            }),
         })),
     }));
 
@@ -145,6 +162,7 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
         font_family: restaurant.font_family,
         languages: restaurant.languages,
         default_language: restaurant.default_language,
+        last_updated_at: lastUpdatedAt || new Date().toISOString(),
       },
       categories: transformedCategories,
     };

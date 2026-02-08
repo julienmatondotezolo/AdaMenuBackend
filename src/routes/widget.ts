@@ -1,7 +1,11 @@
 import { Router, Request, Response } from "express";
 import { restaurants } from "../config/restaurants";
+import { publicLimiter } from "../middleware/rate-limit";
 
 const router = Router();
+
+// Apply rate limiting to widget routes (public-facing)
+router.use(publicLimiter);
 
 // Simple in-memory cache
 interface CacheEntry {

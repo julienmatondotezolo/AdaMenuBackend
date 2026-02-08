@@ -7,6 +7,7 @@ import {
   updateMenuItemSchema,
   bulkMenuItemSchema,
   reorderSchema,
+  eightySixSchema,
 } from "../../validation/schemas";
 import { getSupabase } from "../../services/supabase";
 
@@ -336,6 +337,57 @@ router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
     res.status(500).json({ error: "SERVER_ERROR", message: err.message });
   }
 });
+
+// ─── PATCH /api/v1/restaurants/:restaurantId/menu-items/:id/86 ──────────────
+// Quick 86 (out of stock) toggle — designed for mobile-first, single-tap usage
+router.patch(
+  "/:id/86",
+  validate(eightySixSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    const supabase = req.supabaseClient || getSupabase();
+    if (!supabase) {
+      res.status(500).json({ error: "SERVER_ERROR", message: "Database not configured" });
+      return;
+    }
+
+    try {
+      const { is_86d, eighty_sixed_until } = req.body;
+
+      const updateData: Record<string, any> = {
+        is_86d,
+        eighty_sixed_at: is_86d ? new Date().toISOString() : null,
+        eighty_sixed_until: is_86d ? (eighty_sixed_until || null) : null,
+      };
+
+      const { data, error } = await supabase
+        .from("menu_items")
+        .update(updateData)
+        .eq("id", req.params.id)
+        .eq("restaurant_id", req.params.restaurantId)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (!data) {
+        res.status(404).json({ error: "NOT_FOUND", message: "Menu item not found" });
+        return;
+      }
+
+      // Clear menu cache so widget shows updated status quickly
+      // (in a real system, this would also fire a webhook/SSE event)
+
+      res.json({
+        data,
+        message: is_86d
+          ? `Item 86'd${eighty_sixed_until ? " until " + eighty_sixed_until : ""}`
+          : "Item back on menu",
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: "SERVER_ERROR", message: err.message });
+    }
+  }
+);
 
 // ─── PUT /api/v1/restaurants/:restaurantId/menu-items/reorder ───────────────
 router.put(

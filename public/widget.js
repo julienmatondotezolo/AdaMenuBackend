@@ -24,7 +24,10 @@
   if (!scriptEl) return;
 
   var SLUG = scriptEl.getAttribute("data-restaurant");
-  if (!SLUG) return;
+  if (!SLUG) {
+    console.error("[AdaMenu] Missing required attribute: data-restaurant. Widget will not load. Usage: <script src=\"widget.js\" data-restaurant=\"your-slug\"></script>");
+    return;
+  }
 
   var API_BASE = (function () {
     try { return new URL(scriptEl.src).origin; }
@@ -35,6 +38,11 @@
   var ATTR_THEME = scriptEl.getAttribute("data-theme") || "light";
   var ATTR_PRIMARY = scriptEl.getAttribute("data-primary-color");
   var ATTR_ACCENT = scriptEl.getAttribute("data-accent-color");
+
+  // Validate color attributes to prevent CSS injection
+  var HEX_RE = /^#[0-9a-fA-F]{3,8}$/;
+  if (ATTR_PRIMARY && !HEX_RE.test(ATTR_PRIMARY)) { console.warn("[AdaMenu] Invalid data-primary-color, ignoring:", ATTR_PRIMARY); ATTR_PRIMARY = null; }
+  if (ATTR_ACCENT && !HEX_RE.test(ATTR_ACCENT)) { console.warn("[AdaMenu] Invalid data-accent-color, ignoring:", ATTR_ACCENT); ATTR_ACCENT = null; }
 
   // ── Utility helpers ──
   function esc(s) {
@@ -311,7 +319,8 @@
     var scriptTag = document.createElement("script");
     scriptTag.type = "application/ld+json";
     scriptTag.setAttribute("data-adamenu-jsonld", "true");
-    scriptTag.textContent = JSON.stringify(schema);
+    // Escape </script> sequences to prevent XSS via user-supplied menu item names
+    scriptTag.textContent = JSON.stringify(schema).replace(/</g, '\\u003c');
     document.head.appendChild(scriptTag);
   }
 
