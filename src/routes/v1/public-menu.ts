@@ -48,7 +48,22 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
 
   const supabase = getSupabase();
   if (!supabase) {
-    res.status(500).json({ error: "SERVER_ERROR", message: "Database not configured" });
+    console.warn("Supabase not configured, returning empty menu");
+    const emptyResponse = {
+      restaurant: {
+        name: slug,
+        slug: slug,
+        logo_url: null,
+        primary_color: "#000000",
+        accent_color: "#666666",
+        font_family: "Arial, sans-serif",
+        languages: ["en"],
+        default_language: "en",
+        last_updated_at: new Date().toISOString(),
+      },
+      categories: [],
+    };
+    res.json(emptyResponse);
     return;
   }
 
@@ -72,10 +87,23 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
       .single();
 
     if (restError || !restaurant) {
-      res.status(404).json({
-        error: "NOT_FOUND",
-        message: `Restaurant "${slug}" not found`,
-      });
+      console.warn(`Restaurant "${slug}" not found, returning empty menu`);
+      // Return empty menu structure instead of error for development
+      const emptyResponse = {
+        restaurant: {
+          name: slug,
+          slug: slug,
+          logo_url: null,
+          primary_color: "#000000",
+          accent_color: "#666666",
+          font_family: "Arial, sans-serif",
+          languages: ["en"],
+          default_language: "en",
+          last_updated_at: new Date().toISOString(),
+        },
+        categories: [],
+      };
+      res.json(emptyResponse);
       return;
     }
 

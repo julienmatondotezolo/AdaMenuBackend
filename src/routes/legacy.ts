@@ -1,6 +1,10 @@
 import { Router, Request, Response } from "express";
+import { getSupabaseAdmin } from "../lib/supabase";
 
 const router = Router();
+
+// Default restaurant for legacy compatibility (L'Osteria - paying customer)
+const DEFAULT_RESTAURANT_ID = "losteria";
 
 // Legacy compatibility routes for old frontend
 
@@ -9,8 +13,33 @@ const router = Router();
  * Maps to: /restaurants/:restaurantId/categories
  */
 router.get("/category/parents", async (req: Request, res: Response): Promise<void> => {
-  // For now, return empty array for compatibility
-  res.json([]);
+  try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      console.warn("Supabase not configured, returning empty categories");
+      res.json([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("categories")
+      .select("*")
+      .eq("restaurant_id", DEFAULT_RESTAURANT_ID)
+      .order("position");
+
+    if (error) {
+      console.error("Error fetching categories:", error.message);
+      console.warn("Returning empty categories array due to database error");
+      res.json([]);
+      return;
+    }
+
+    res.json(data || []);
+  } catch (error) {
+    console.error("Unexpected error fetching categories:", error);
+    console.warn("Returning empty categories array due to unexpected error");
+    res.json([]);
+  }
 });
 
 /**
@@ -18,8 +47,33 @@ router.get("/category/parents", async (req: Request, res: Response): Promise<voi
  * Maps to: /restaurants/:restaurantId/allergens
  */
 router.get("/allergen", async (req: Request, res: Response): Promise<void> => {
-  // For now, return empty array for compatibility
-  res.json([]);
+  try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      console.warn("Supabase not configured, returning empty allergens");
+      res.json([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("allergens")
+      .select("*")
+      .eq("restaurant_id", DEFAULT_RESTAURANT_ID)
+      .order("name");
+
+    if (error) {
+      console.error("Error fetching allergens:", error.message);
+      console.warn("Returning empty allergens array due to database error");
+      res.json([]);
+      return;
+    }
+
+    res.json(data || []);
+  } catch (error) {
+    console.error("Unexpected error fetching allergens:", error);
+    console.warn("Returning empty allergens array due to unexpected error");
+    res.json([]);
+  }
 });
 
 /**
@@ -27,8 +81,33 @@ router.get("/allergen", async (req: Request, res: Response): Promise<void> => {
  * Maps to: /restaurants/:restaurantId/side-dishes
  */
 router.get("/sidedish", async (req: Request, res: Response): Promise<void> => {
-  // For now, return empty array for compatibility
-  res.json([]);
+  try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      console.warn("Supabase not configured, returning empty side dishes");
+      res.json([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("side_dishes")
+      .select("*")
+      .eq("restaurant_id", DEFAULT_RESTAURANT_ID)
+      .order("name");
+
+    if (error) {
+      console.error("Error fetching side dishes:", error.message);
+      console.warn("Returning empty side dishes array due to database error");
+      res.json([]);
+      return;
+    }
+
+    res.json(data || []);
+  } catch (error) {
+    console.error("Unexpected error fetching side dishes:", error);
+    console.warn("Returning empty side dishes array due to unexpected error");
+    res.json([]);
+  }
 });
 
 export default router;
