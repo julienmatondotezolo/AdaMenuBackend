@@ -36,7 +36,7 @@ function setCache(key: string, data: Record<string, unknown>): void {
  * No authentication required. Identified by restaurant slug.
  */
 router.get("/", async (req: Request, res: Response): Promise<void> => {
-  const slug = req.query.restaurant as string;
+  const slug = req.query.restaurant as string || "losteria"; // Default to losteria for dev
 
   if (!slug) {
     res.status(400).json({

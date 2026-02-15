@@ -8,6 +8,7 @@ import sideDishesRouter from "./side-dishes";
 import supplementsRouter from "./supplements";
 import templatesRouter from "./templates";
 import publicMenuRouter from "./public-menu";
+import legacyRouter from "../legacy";
 
 const router = Router();
 
@@ -47,5 +48,8 @@ router.use("/restaurants/:restaurantId/templates", templatesRouter);
 
 // Public menu endpoint for widget
 router.use("/menu", publicMenuRouter);
+
+// ─── Legacy compatibility routes ────────────────────────────────────────────
+router.use(legacyRouter);
 
 export default router;
