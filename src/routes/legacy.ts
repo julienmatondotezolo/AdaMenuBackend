@@ -110,4 +110,38 @@ router.get("/sidedish", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
+/**
+ * Legacy route: /supplement
+ * Maps to: /restaurants/:restaurantId/supplements
+ */
+router.get("/supplement", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const supabase = getSupabaseAdmin();
+    if (!supabase) {
+      console.warn("Supabase not configured, returning empty supplements");
+      res.json([]);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from("supplements")
+      .select("*")
+      .eq("restaurant_id", DEFAULT_RESTAURANT_ID)
+      .order("name");
+
+    if (error) {
+      console.error("Error fetching supplements:", error.message);
+      console.warn("Returning empty supplements array due to database error");
+      res.json([]);
+      return;
+    }
+
+    res.json(data || []);
+  } catch (error) {
+    console.error("Unexpected error fetching supplements:", error);
+    console.warn("Returning empty supplements array due to unexpected error");
+    res.json([]);
+  }
+});
+
 export default router;
