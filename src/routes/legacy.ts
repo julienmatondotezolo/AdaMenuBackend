@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { getSupabaseAdmin } from "../lib/supabase";
+import { mockCategories, mockAllergens, mockSideDishes, mockSupplements } from "../data/mock-data";
 
 const router = Router();
 
@@ -29,8 +30,8 @@ router.get("/category/parents", async (req: Request, res: Response): Promise<voi
   try {
     const supabase = getSupabaseAdmin();
     if (!supabase) {
-      console.warn("Supabase not configured, returning empty categories");
-      res.json([]);
+      console.warn("Supabase not configured, returning mock categories for development");
+      res.json(mockCategories);
       return;
     }
 
@@ -42,16 +43,16 @@ router.get("/category/parents", async (req: Request, res: Response): Promise<voi
 
     if (error) {
       console.error("Error fetching categories:", error.message);
-      console.warn("Returning empty categories array due to database error");
-      res.json([]);
+      console.warn("Returning mock categories due to database error");
+      res.json(mockCategories);
       return;
     }
 
     res.json(data || []);
   } catch (error) {
     console.error("Unexpected error fetching categories:", error);
-    console.warn("Returning empty categories array due to unexpected error");
-    res.json([]);
+    console.warn("Returning mock categories due to unexpected error");
+    res.json(mockCategories);
   }
 });
 
@@ -76,8 +77,8 @@ router.get("/allergen", async (req: Request, res: Response): Promise<void> => {
   try {
     const supabase = getSupabaseAdmin();
     if (!supabase) {
-      console.warn("Supabase not configured, returning empty allergens");
-      res.json([]);
+      console.warn("Supabase not configured, returning mock allergens for development");
+      res.json(mockAllergens);
       return;
     }
 
@@ -89,16 +90,16 @@ router.get("/allergen", async (req: Request, res: Response): Promise<void> => {
 
     if (error) {
       console.error("Error fetching allergens:", error.message);
-      console.warn("Returning empty allergens array due to database error");
-      res.json([]);
+      console.warn("Returning mock allergens due to database error");
+      res.json(mockAllergens);
       return;
     }
 
     res.json(data || []);
   } catch (error) {
     console.error("Unexpected error fetching allergens:", error);
-    console.warn("Returning empty allergens array due to unexpected error");
-    res.json([]);
+    console.warn("Returning mock allergens due to unexpected error");
+    res.json(mockAllergens);
   }
 });
 
@@ -123,8 +124,8 @@ router.get("/sidedish", async (req: Request, res: Response): Promise<void> => {
   try {
     const supabase = getSupabaseAdmin();
     if (!supabase) {
-      console.warn("Supabase not configured, returning empty side dishes");
-      res.json([]);
+      console.warn("Supabase not configured, returning mock side dishes for development");
+      res.json(mockSideDishes);
       return;
     }
 
@@ -136,16 +137,16 @@ router.get("/sidedish", async (req: Request, res: Response): Promise<void> => {
 
     if (error) {
       console.error("Error fetching side dishes:", error.message);
-      console.warn("Returning empty side dishes array due to database error");
-      res.json([]);
+      console.warn("Returning mock side dishes due to database error");
+      res.json(mockSideDishes);
       return;
     }
 
     res.json(data || []);
   } catch (error) {
     console.error("Unexpected error fetching side dishes:", error);
-    console.warn("Returning empty side dishes array due to unexpected error");
-    res.json([]);
+    console.warn("Returning mock side dishes due to unexpected error");
+    res.json(mockSideDishes);
   }
 });
 
@@ -170,8 +171,8 @@ router.get("/supplement", async (req: Request, res: Response): Promise<void> => 
   try {
     const supabase = getSupabaseAdmin();
     if (!supabase) {
-      console.warn("Supabase not configured, returning empty supplements");
-      res.json([]);
+      console.warn("Supabase not configured, returning mock supplements for development");
+      res.json(mockSupplements);
       return;
     }
 
@@ -183,16 +184,16 @@ router.get("/supplement", async (req: Request, res: Response): Promise<void> => 
 
     if (error) {
       console.error("Error fetching supplements:", error.message);
-      console.warn("Returning empty supplements array due to database error");
-      res.json([]);
+      console.warn("Returning mock supplements due to database error");
+      res.json(mockSupplements);
       return;
     }
 
     res.json(data || []);
   } catch (error) {
     console.error("Unexpected error fetching supplements:", error);
-    console.warn("Returning empty supplements array due to unexpected error");
-    res.json([]);
+    console.warn("Returning mock supplements due to unexpected error");
+    res.json(mockSupplements);
   }
 });
 

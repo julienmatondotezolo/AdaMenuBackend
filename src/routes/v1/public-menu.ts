@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { publicLimiter } from "../../middleware/rate-limit";
 import { getSupabase } from "../../services/supabase";
+import { mockRestaurant, mockCategories, mockSubcategories, mockMenuItems, mockAllergens, mockSideDishes, mockSupplements } from "../../data/mock-data";
 
 const router = Router();
 
@@ -27,6 +28,33 @@ function getCached(key: string): Record<string, unknown> | null {
 
 function setCache(key: string, data: Record<string, unknown>): void {
   menuCache[key] = { data, timestamp: Date.now() };
+}
+
+function generateMockMenuResponse() {
+  return {
+    restaurant: {
+      ...mockRestaurant,
+      last_updated_at: new Date().toISOString(),
+    },
+    categories: mockCategories.map(cat => ({
+      ...cat,
+      subcategories: mockSubcategories
+        .filter(sub => sub.category_id === cat.id)
+        .map(sub => ({
+          id: sub.id,
+          name: sub.name,
+          sort_order: sub.sort_order,
+          items: mockMenuItems
+            .filter(item => item.subcategory_id === sub.id)
+            .map(item => ({
+              ...item,
+              allergens: mockAllergens.slice(0, 2), // Add some allergens
+              side_dishes: mockSideDishes.slice(0, 1),
+              supplements: mockSupplements.slice(0, 1)
+            }))
+        }))
+    }))
+  };
 }
 
 /**
@@ -69,22 +97,9 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
 
   const supabase = getSupabase();
   if (!supabase) {
-    console.warn("Supabase not configured, returning empty menu");
-    const emptyResponse = {
-      restaurant: {
-        name: slug,
-        slug: slug,
-        logo_url: null,
-        primary_color: "#000000",
-        accent_color: "#666666",
-        font_family: "Arial, sans-serif",
-        languages: ["en"],
-        default_language: "en",
-        last_updated_at: new Date().toISOString(),
-      },
-      categories: [],
-    };
-    res.json(emptyResponse);
+    console.warn("Supabase not configured, returning mock data for development");
+    const mockResponse = generateMockMenuResponse();
+    res.json(mockResponse);
     return;
   }
 
@@ -108,23 +123,10 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
       .single();
 
     if (restError || !restaurant) {
-      console.warn(`Restaurant "${slug}" not found, returning empty menu`);
-      // Return empty menu structure instead of error for development
-      const emptyResponse = {
-        restaurant: {
-          name: slug,
-          slug: slug,
-          logo_url: null,
-          primary_color: "#000000",
-          accent_color: "#666666",
-          font_family: "Arial, sans-serif",
-          languages: ["en"],
-          default_language: "en",
-          last_updated_at: new Date().toISOString(),
-        },
-        categories: [],
-      };
-      res.json(emptyResponse);
+      console.warn(`Restaurant "${slug}" not found, returning mock data for development`);
+      // Return mock data instead of empty menu for better development experience
+      const mockResponse = generateMockMenuResponse();
+      res.json(mockResponse);
       return;
     }
 
