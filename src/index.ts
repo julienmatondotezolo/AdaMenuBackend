@@ -8,6 +8,7 @@ import widgetRoutes from "./routes/widget";
 import v1Routes from "./routes/v1";
 import { errorHandler } from "./middleware/error-handler";
 import { requestLogger } from "./middleware/request-logger";
+import { setupSwagger } from "./config/swagger";
 
 dotenv.config();
 
@@ -47,7 +48,24 @@ app.use(requestLogger);
 // ─── Serve static files (widget.js, widget-test.html) ──────────────────────
 app.use(express.static(path.join(__dirname, "../public")));
 
-// ─── Health check ──────────────────────────────────────────────────────────
+// ─── Swagger API Documentation ─────────────────────────────────────────────
+setupSwagger(app);
+
+/**
+ * @swagger
+ * /health:
+ *   get:
+ *     summary: Health check endpoint
+ *     description: Returns the health status and basic information about the service
+ *     tags: [Health]
+ *     responses:
+ *       200:
+ *         description: Service is healthy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/HealthCheck'
+ */
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
@@ -58,11 +76,25 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// ─── V1 API routes (multi-tenant CRUD + public menu) ───────────────────────
+/**
+ * @swagger
+ * /api/v1:
+ *   description: Modern multi-tenant API endpoints for restaurant management
+ */
 app.use("/api/v1", v1Routes);
 
-// ─── Legacy routes ─────────────────────────────────────────────────────────
+/**
+ * @swagger
+ * /api/menu:
+ *   description: Legacy single-tenant menu endpoints for backward compatibility
+ */
 app.use("/api/menu", menuRoutes);
+
+/**
+ * @swagger
+ * /api/widget:
+ *   description: Widget-related endpoints for menu displays
+ */
 app.use("/api/widget", widgetRoutes);
 
 // ─── Global error handler (must be last) ───────────────────────────────────
@@ -85,9 +117,10 @@ process.on("unhandledRejection", (reason) => {
 // ─── Start server ──────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`🍽️  AdaMenu backend running on http://localhost:${PORT}`);
-  console.log(`   Health:  http://localhost:${PORT}/health`);
-  console.log(`   API:     http://localhost:${PORT}/api/v1`);
-  console.log(`   Widget:  http://localhost:${PORT}/widget-test.html`);
+  console.log(`   Health:    http://localhost:${PORT}/health`);
+  console.log(`   API:       http://localhost:${PORT}/api/v1`);
+  console.log(`   Widget:    http://localhost:${PORT}/widget-test.html`);
+  console.log(`   📚 API Docs: http://localhost:${PORT}/api-docs`);
 });
 
 export default app;

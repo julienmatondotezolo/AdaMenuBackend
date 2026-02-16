@@ -30,10 +30,31 @@ function setCache(key: string, data: Record<string, unknown>): void {
 }
 
 /**
- * GET /api/v1/menu?restaurant=slug
- *
- * Public endpoint: returns the full menu for the widget.
- * No authentication required. Identified by restaurant slug.
+ * @swagger
+ * /api/v1/menu:
+ *   get:
+ *     summary: Get public menu for restaurant
+ *     description: Returns the complete menu structure for a restaurant, including categories, subcategories, menu items, allergens, and side dishes. This endpoint is used by the menu widget and public displays.
+ *     tags: [Public Menu]
+ *     parameters:
+ *       - in: query
+ *         name: restaurant
+ *         schema:
+ *           type: string
+ *         required: false
+ *         description: Restaurant slug identifier (defaults to 'losteria' for development)
+ *         example: losteria
+ *     responses:
+ *       200:
+ *         description: Menu data retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/PublicMenu'
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       500:
+ *         $ref: '#/components/responses/ServerError'
  */
 router.get("/", async (req: Request, res: Response): Promise<void> => {
   const slug = req.query.restaurant as string || "losteria"; // Default to losteria for dev
