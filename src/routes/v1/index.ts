@@ -7,6 +7,9 @@ import allergensRouter from "./allergens";
 import sideDishesRouter from "./side-dishes";
 import supplementsRouter from "./supplements";
 import templatesRouter from "./templates";
+import stockRouter from "./stock";
+import aiReceptionistRouter from "./ai-receptionist";
+import planningRouter from "./planning";
 import publicMenuRouter from "./public-menu";
 import legacyRouter from "../legacy";
 
@@ -43,6 +46,15 @@ router.use("/restaurants/:restaurantId/supplements", supplementsRouter);
 
 // Templates
 router.use("/restaurants/:restaurantId/templates", templatesRouter);
+
+// Stock Management
+router.use("/restaurants/:restaurantId/stock", stockRouter);
+
+// AI Receptionist
+router.use("/restaurants/:restaurantId/ai-receptionist", aiReceptionistRouter);
+
+// Staff Planning
+router.use("/restaurants/:restaurantId/planning", planningRouter);
 
 // ─── Public routes (no auth) ────────────────────────────────────────────────
 
