@@ -10,6 +10,7 @@ import templatesRouter from "./templates";
 import stockRouter from "./stock";
 import aiReceptionistRouter from "./ai-receptionist";
 import planningRouter from "./planning";
+import staffRouter from "./staff";
 import publicMenuRouter from "./public-menu";
 import legacyRouter from "../legacy";
 
@@ -55,6 +56,9 @@ router.use("/restaurants/:restaurantId/ai-receptionist", aiReceptionistRouter);
 
 // Staff Planning
 router.use("/restaurants/:restaurantId/planning", planningRouter);
+
+// Staff Management (global endpoints)
+router.use("/staff", staffRouter);
 
 // ─── Public routes (no auth) ────────────────────────────────────────────────
 
