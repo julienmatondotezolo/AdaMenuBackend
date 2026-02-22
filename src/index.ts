@@ -6,6 +6,7 @@ import dotenv from "dotenv";
 import menuRoutes from "./routes/menu";
 import widgetRoutes from "./routes/widget";
 import v1Routes from "./routes/v1";
+import v2Routes from "./routes/v2";
 import { errorHandler } from "./middleware/error-handler";
 import { requestLogger } from "./middleware/request-logger";
 import { setupSwagger } from "./config/swagger";
@@ -79,9 +80,16 @@ app.get("/health", (_req, res) => {
 /**
  * @swagger
  * /api/v1:
- *   description: Modern multi-tenant API endpoints for restaurant management
+ *   description: Single-tenant API endpoints (backward compatibility)
  */
 app.use("/api/v1", v1Routes);
+
+/**
+ * @swagger
+ * /api/v2:
+ *   description: Multi-tenant API endpoints - restaurant ID required
+ */
+app.use("/api/v2", v2Routes);
 
 /**
  * @swagger
