@@ -10,7 +10,7 @@ import builtInTemplateRoutes from "./routes/builtInTemplates";
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 5006;
 const startTime = Date.now();
 const AUTH_URL = process.env.AUTH_URL || "https://auth.adasystems.app";
 
