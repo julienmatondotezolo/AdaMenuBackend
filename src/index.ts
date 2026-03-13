@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./swagger";
 import { requireAuth } from "./middleware/auth";
 import templateRoutes from "./routes/templates";
 import builtInTemplateRoutes from "./routes/builtInTemplates";
@@ -27,6 +29,9 @@ app.use(
 );
 
 app.use(express.json({ limit: "10mb" }));
+
+// ─── Swagger ─────────────────────────────────────────────────────────────────
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // ─── Health ─────────────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => {
