@@ -6,6 +6,8 @@ import { swaggerSpec } from "./swagger";
 import { requireAuth } from "./middleware/auth";
 import templateRoutes from "./routes/templates";
 import builtInTemplateRoutes from "./routes/builtInTemplates";
+import publishedMenuRoutes from "./routes/publishedMenus";
+import publicMenuRoutes from "./routes/publicMenus";
 
 dotenv.config();
 
@@ -112,6 +114,12 @@ app.use("/api/v1/built-in-templates", builtInTemplateRoutes);
 
 // ─── Templates (per-restaurant, published) ──────────────────────────────────
 app.use("/api/v1/restaurants/:restaurantId/templates", templateRoutes);
+
+// ─── Published menus (QR code — auth required for publishing) ───────────────
+app.use("/api/v1/menus", publishedMenuRoutes);
+
+// ─── Public menus (QR code — no auth) ──────────────────────────────────────
+app.use("/api/v1/public/menus", publicMenuRoutes);
 
 // ─── Start ──────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
