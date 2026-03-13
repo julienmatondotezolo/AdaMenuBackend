@@ -124,6 +124,48 @@ router.patch(
   }
 );
 
+// ─── PATCH /api/v1/restaurants/:restaurantId/templates/:id/set-default ───────
+router.patch(
+  "/:id/set-default",
+  async (req: Request, res: Response): Promise<void> => {
+    const supabase = req.supabaseClient || getSupabase();
+    if (!supabase) {
+      res.status(500).json({ error: "SERVER_ERROR", message: "Database not configured" });
+      return;
+    }
+
+    try {
+      // Unset any existing default for this restaurant
+      const { error: unsetError } = await supabase
+        .from("menu_templates")
+        .update({ is_default: false })
+        .eq("restaurant_id", req.params.restaurantId)
+        .eq("is_default", true);
+
+      if (unsetError) throw unsetError;
+
+      // Set the specified template as default
+      const { data, error } = await supabase
+        .from("menu_templates")
+        .update({ is_default: true })
+        .eq("id", req.params.id)
+        .eq("restaurant_id", req.params.restaurantId)
+        .select()
+        .single();
+
+      if (error) throw error;
+      if (!data) {
+        res.status(404).json({ error: "NOT_FOUND", message: "Template not found" });
+        return;
+      }
+
+      res.json({ data });
+    } catch (err: any) {
+      res.status(500).json({ error: "SERVER_ERROR", message: err.message });
+    }
+  }
+);
+
 // ─── DELETE /api/v1/restaurants/:restaurantId/templates/:id ─────────────────
 router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
   const supabase = req.supabaseClient || getSupabase();

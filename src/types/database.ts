@@ -155,7 +155,11 @@ export interface MenuTemplate {
   id: string;
   restaurant_id: string;
   name: string;
+  description?: string;
+  thumbnail?: string;
   project_json: Record<string, unknown>;
+  is_default: boolean;
+  published_by?: string;
   created_at: string;
   updated_at: string;
 }

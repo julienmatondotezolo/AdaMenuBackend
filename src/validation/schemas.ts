@@ -257,10 +257,18 @@ export const updateSupplementSchema = z.object({
 
 export const createTemplateSchema = z.object({
   name: z.string().min(1).max(200),
+  description: z.string().optional(),
+  thumbnail: z.string().optional(),
   project_json: z.record(z.string(), z.unknown()),
+  is_default: z.boolean().optional(),
+  published_by: z.string().uuid().optional(),
 });
 
 export const updateTemplateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
+  description: z.string().optional(),
+  thumbnail: z.string().optional(),
   project_json: z.record(z.string(), z.unknown()).optional(),
+  is_default: z.boolean().optional(),
+  published_by: z.string().uuid().optional(),
 });
