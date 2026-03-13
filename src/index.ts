@@ -37,7 +37,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// ─── GET /api/v1/restaurants — proxy AdaAuth restaurants endpoint ────────────
+// ─── GET /api/v1/restaurants — fetch from AdaAuth /auth/profile ──────────────
 app.get("/api/v1/restaurants", requireAuth, async (req, res) => {
   const token = req.headers.authorization?.slice(7);
   if (!token) {
@@ -46,22 +46,24 @@ app.get("/api/v1/restaurants", requireAuth, async (req, res) => {
   }
 
   try {
-    // Admin gets all restaurants, others get only their assigned ones
-    const endpoint = req.auth?.role === "admin"
-      ? `${AUTH_URL}/admin/restaurants`
-      : `${AUTH_URL}/users/restaurants`;
-
-    const authRes = await fetch(endpoint, {
+    const authRes = await fetch(`${AUTH_URL}/auth/profile`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
     if (!authRes.ok) {
-      res.status(authRes.status).json({ error: "AUTH_ERROR", message: "Failed to fetch restaurants" });
+      res.status(authRes.status).json({ error: "AUTH_ERROR", message: "Failed to fetch profile" });
       return;
     }
 
-    const data = await authRes.json();
-    res.json(data);
+    const profile = await authRes.json();
+    const restaurants = (profile.user_restaurant_access || []).map((access: any) => ({
+      id: access.restaurants?.id,
+      slug: access.restaurants?.slug,
+      name: access.restaurants?.name,
+      role: access.role,
+    })).filter((r: any) => r.id);
+
+    res.json({ restaurants });
   } catch (err: any) {
     res.status(500).json({ error: "SERVER_ERROR", message: err.message });
   }
