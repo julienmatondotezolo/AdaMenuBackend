@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, requireAdmin } from "../middleware/auth";
 import { getSupabase } from "../lib/supabase";
 
 const router = Router({ mergeParams: true });
@@ -62,8 +62,8 @@ router.get("/:id", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// ─── POST /api/v1/restaurants/:restaurantId/templates ───────────────────────
-router.post("/", async (req: Request, res: Response): Promise<void> => {
+// ─── POST /api/v1/restaurants/:restaurantId/templates (admin only) ──────────
+router.post("/", requireAdmin, async (req: Request, res: Response): Promise<void> => {
   const { name, description, thumbnail, project_json, is_default, published_by } = req.body;
 
   if (!name || !project_json) {
@@ -105,8 +105,8 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// ─── PATCH /api/v1/restaurants/:restaurantId/templates/:id ──────────────────
-router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
+// ─── PATCH /api/v1/restaurants/:restaurantId/templates/:id (admin only) ─────
+router.patch("/:id", requireAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { data, error } = await getSupabase()
       .from("menu_templates")
@@ -127,20 +127,18 @@ router.patch("/:id", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// ─── PATCH /api/v1/restaurants/:restaurantId/templates/:id/set-default ──────
-router.patch("/:id/set-default", async (req: Request, res: Response): Promise<void> => {
+// ─── PATCH set-default (admin only) ─────────────────────────────────────────
+router.patch("/:id/set-default", requireAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const supabase = getSupabase();
     const restaurantId = req.params.restaurantId;
 
-    // Unset existing default
     await supabase
       .from("menu_templates")
       .update({ is_default: false })
       .eq("restaurant_id", restaurantId)
       .eq("is_default", true);
 
-    // Set new default
     const { data, error } = await supabase
       .from("menu_templates")
       .update({ is_default: true })
@@ -160,8 +158,8 @@ router.patch("/:id/set-default", async (req: Request, res: Response): Promise<vo
   }
 });
 
-// ─── DELETE /api/v1/restaurants/:restaurantId/templates/:id ─────────────────
-router.delete("/:id", async (req: Request, res: Response): Promise<void> => {
+// ─── DELETE /api/v1/restaurants/:restaurantId/templates/:id (admin only) ────
+router.delete("/:id", requireAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { error } = await getSupabase()
       .from("menu_templates")

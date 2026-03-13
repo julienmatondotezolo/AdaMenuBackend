@@ -38,3 +38,14 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     res.status(401).json({ error: "UNAUTHORIZED", message: "Token verification failed" });
   }
 }
+
+/**
+ * Requires admin role. Must be used after requireAuth.
+ */
+export function requireAdmin(req: Request, res: Response, next: NextFunction): void {
+  if (req.auth?.role !== "admin") {
+    res.status(403).json({ error: "FORBIDDEN", message: "Admin access required" });
+    return;
+  }
+  next();
+}
