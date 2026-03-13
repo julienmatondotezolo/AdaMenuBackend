@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { requireAuth } from "./middleware/auth";
 import templateRoutes from "./routes/templates";
+import builtInTemplateRoutes from "./routes/builtInTemplates";
 
 dotenv.config();
 
@@ -101,7 +102,10 @@ app.get("/api/v1/templates/publish-status", requireAuth, async (req, res) => {
   }
 });
 
-// ─── Templates ──────────────────────────────────────────────────────────────
+// ─── Built-in templates (global) ────────────────────────────────────────────
+app.use("/api/v1/built-in-templates", builtInTemplateRoutes);
+
+// ─── Templates (per-restaurant, published) ──────────────────────────────────
 app.use("/api/v1/restaurants/:restaurantId/templates", templateRoutes);
 
 // ─── Start ──────────────────────────────────────────────────────────────────
