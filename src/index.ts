@@ -37,7 +37,7 @@ app.get("/health", (_req, res) => {
   });
 });
 
-// ─── GET /api/v1/restaurants — proxy AdaAuth /owner/restaurants ─────────────
+// ─── GET /api/v1/restaurants — proxy AdaAuth restaurants endpoint ────────────
 app.get("/api/v1/restaurants", requireAuth, async (req, res) => {
   const token = req.headers.authorization?.slice(7);
   if (!token) {
@@ -46,7 +46,12 @@ app.get("/api/v1/restaurants", requireAuth, async (req, res) => {
   }
 
   try {
-    const authRes = await fetch(`${AUTH_URL}/owner/restaurants`, {
+    // Admin gets all restaurants, others get only their assigned ones
+    const endpoint = req.auth?.role === "admin"
+      ? `${AUTH_URL}/admin/restaurants`
+      : `${AUTH_URL}/users/restaurants`;
+
+    const authRes = await fetch(endpoint, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
