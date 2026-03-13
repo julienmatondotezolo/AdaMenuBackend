@@ -18,7 +18,7 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
     const validateRes = await fetch(`${AUTH_URL}/auth/validate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ access_token: token, app_slug: "ada-menu" }),
+      body: JSON.stringify({ access_token: token, app_slug: "menu-builder-ai" }),
     });
 
     const data = await validateRes.json();
