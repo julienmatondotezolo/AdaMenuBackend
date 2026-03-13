@@ -69,6 +69,38 @@ app.get("/api/v1/restaurants", requireAuth, async (req, res) => {
   }
 });
 
+// ─── GET /api/v1/templates/publish-status?name=... ──────────────────────────
+// Returns which restaurants have this template published and their default status
+app.get("/api/v1/templates/publish-status", requireAuth, async (req, res) => {
+  const name = req.query.name as string;
+  if (!name) {
+    res.status(400).json({ error: "BAD_REQUEST", message: "name query param required" });
+    return;
+  }
+
+  try {
+    const { getSupabase } = await import("./lib/supabase");
+    const { data, error } = await getSupabase()
+      .from("menu_templates")
+      .select("id, restaurant_id, is_default, updated_at")
+      .eq("name", name);
+
+    if (error) throw error;
+
+    const status: Record<string, { id: string; is_default: boolean; updated_at: string }> = {};
+    for (const row of data || []) {
+      status[row.restaurant_id] = {
+        id: row.id,
+        is_default: row.is_default,
+        updated_at: row.updated_at,
+      };
+    }
+    res.json({ status });
+  } catch (err: any) {
+    res.status(500).json({ error: "SERVER_ERROR", message: err.message });
+  }
+});
+
 // ─── Templates ──────────────────────────────────────────────────────────────
 app.use("/api/v1/restaurants/:restaurantId/templates", templateRoutes);
 
