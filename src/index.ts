@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import restaurantRoutes from "./routes/restaurants";
 import templateRoutes from "./routes/templates";
 
 dotenv.config();
@@ -36,6 +37,7 @@ app.get("/health", (_req, res) => {
 });
 
 // ─── Routes ─────────────────────────────────────────────────────────────────
+app.use("/api/v1/restaurants", restaurantRoutes);
 app.use("/api/v1/restaurants/:restaurantId/templates", templateRoutes);
 
 // ─── Start ──────────────────────────────────────────────────────────────────
