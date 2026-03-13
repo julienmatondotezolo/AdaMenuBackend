@@ -8,6 +8,7 @@ import templateRoutes from "./routes/templates";
 import builtInTemplateRoutes from "./routes/builtInTemplates";
 import publishedMenuRoutes from "./routes/publishedMenus";
 import publicMenuRoutes from "./routes/publicMenus";
+import menuRoutes from "./routes/menus";
 
 dotenv.config();
 
@@ -114,6 +115,9 @@ app.use("/api/v1/built-in-templates", builtInTemplateRoutes);
 
 // ─── Templates (per-restaurant, published) ──────────────────────────────────
 app.use("/api/v1/restaurants/:restaurantId/templates", templateRoutes);
+
+// ─── Menus (per-restaurant, full CRUD) ──────────────────────────────────────
+app.use("/api/v1/restaurants/:restaurantId/menus", menuRoutes);
 
 // ─── Published menus (QR code — auth required for publishing) ───────────────
 app.use("/api/v1/menus", publishedMenuRoutes);
