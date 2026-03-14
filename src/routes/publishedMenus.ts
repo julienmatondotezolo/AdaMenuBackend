@@ -64,7 +64,7 @@ router.get("/:menuId/publish-status", requireAuth, async (req: Request, res: Res
   try {
     const { data, error } = await getSupabase()
       .from("published_menus")
-      .select("id, title, updated_at")
+      .select("id, title, updated_at, menu_data")
       .eq("id", req.params.menuId)
       .maybeSingle();
 

@@ -565,7 +565,7 @@ router.put("/:menuId/pages", async (req: Request, res: Response): Promise<void> 
 
 // ─── PUT /:menuId/bulk — Atomic replace of all menu content ─────────────────
 router.put("/:menuId/bulk", async (req: Request, res: Response): Promise<void> => {
-  const { categories, pages, title, subtitle, template_id, status } = req.body;
+  const { categories, pages, title, subtitle, template_id, status, thumbnail } = req.body;
   const menuId = req.params.menuId;
   const restaurantId = rid(req);
 
@@ -583,6 +583,7 @@ router.put("/:menuId/bulk", async (req: Request, res: Response): Promise<void> =
     if (subtitle !== undefined) menuUpdates.subtitle = subtitle;
     if (template_id !== undefined) menuUpdates.template_id = template_id;
     if (status !== undefined) menuUpdates.status = status;
+    if (thumbnail !== undefined) menuUpdates.thumbnail = thumbnail;
 
     if (Object.keys(menuUpdates).length > 0) {
       const { error } = await supabase

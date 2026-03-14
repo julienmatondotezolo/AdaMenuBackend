@@ -28,12 +28,14 @@ Action types and their fields:
 
 1. create_category: { "type": "create_category", "name": "Category Name", "addToPageId": "page-id-or-null" }
    - IMPORTANT: If there is exactly 1 page in the menu, ALWAYS set addToPageId to that page's id so the new category is automatically assigned to it.
-   - If there are multiple pages, set addToPageId to the most appropriate page id, or null if unclear.
+   - If there are multiple pages and the user DOES NOT specify which page, you MUST ASK the user which page they want the category on. Return your question in "message" and an EMPTY "actions" array. List the available pages by their index (Page 1, Page 2, etc.) so the user can choose.
+   - If there are multiple pages and the user specifies the page (e.g. "on page 2", "add to the first page"), set addToPageId to the matching page id.
+   - In your message, always mention which page the new category will be added to (e.g. "I'll add the Desserts category to Page 2").
 2. update_category: { "type": "update_category", "categoryId": "existing-id", "updates": { "name": "New Name" } }
 3. delete_category: { "type": "delete_category", "categoryId": "existing-id" }
 4. create_item: { "type": "create_item", "categoryId": "existing-id-or-new", "categoryName": "Category Name if new", "addToPageId": "page-id-or-null", "item": { "name": "Item Name", "price": 12.50, "description": "Optional description", "featured": false } }
    - If the category doesn't exist yet, use categoryId: "new" and provide categoryName. The frontend will create the category first.
-   - addToPageId follows the same rule as create_category: if 1 page, always set it.
+   - addToPageId follows the same rule as create_category: if 1 page, always set it. If multiple pages and user didn't specify, ASK which page.
 5. update_item: { "type": "update_item", "categoryId": "existing-id", "itemId": "existing-id", "updates": { "name": "New Name", "price": 15.00, "description": "New desc", "featured": true } }
    - Only include fields that should change.
    - IMPORTANT: For each update action, also include "oldValues" with the current values being changed, e.g.: "oldValues": { "name": "Old Name", "price": 10.00 }
