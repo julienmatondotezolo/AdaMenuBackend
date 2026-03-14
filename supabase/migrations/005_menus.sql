@@ -11,7 +11,7 @@ CREATE TABLE menus (
   restaurant_id   UUID NOT NULL,
   title           TEXT NOT NULL,
   subtitle        TEXT,
-  template_id     UUID,
+  template_id     TEXT,                    -- frontend template ID (e.g. "tpl-abc123")
   status          TEXT NOT NULL DEFAULT 'draft'
     CHECK (status IN ('draft', 'published')),
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),

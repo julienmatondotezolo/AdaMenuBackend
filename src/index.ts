@@ -9,6 +9,7 @@ import builtInTemplateRoutes from "./routes/builtInTemplates";
 import publishedMenuRoutes from "./routes/publishedMenus";
 import publicMenuRoutes from "./routes/publicMenus";
 import menuRoutes from "./routes/menus";
+import aiAssistRoutes from "./routes/aiAssist";
 
 dotenv.config();
 
@@ -118,6 +119,9 @@ app.use("/api/v1/restaurants/:restaurantId/templates", templateRoutes);
 
 // ─── Menus (per-restaurant, full CRUD) ──────────────────────────────────────
 app.use("/api/v1/restaurants/:restaurantId/menus", menuRoutes);
+
+// ─── AI Assistant ───────────────────────────────────────────────────────────
+app.use("/api/v1/ai/menu-assist", aiAssistRoutes);
 
 // ─── Published menus (QR code — auth required for publishing) ───────────────
 app.use("/api/v1/menus", publishedMenuRoutes);

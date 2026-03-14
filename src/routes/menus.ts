@@ -117,9 +117,9 @@ router.get("/:menuId/complete", async (req: Request, res: Response): Promise<voi
         *,
         menu_builder_item_names ( language, name ),
         menu_builder_item_descriptions ( language, description ),
-        menu_builder_item_allergens ( allergen_id, allergens ( id, name, icon ) ),
-        menu_builder_item_side_dishes ( side_dish_id, side_dishes ( id, side_dish_names ( language, name ), price ) ),
-        menu_builder_item_supplements ( supplement_id, supplements ( id, supplement_names ( language, name ), price ) )
+        menu_builder_item_allergens ( allergen_id ),
+        menu_builder_item_side_dishes ( side_dish_id ),
+        menu_builder_item_supplements ( supplement_id )
       `)
       .eq("menu_id", menuId)
       .order("display_order", { ascending: true });
@@ -148,9 +148,9 @@ router.get("/:menuId/complete", async (req: Request, res: Response): Promise<voi
         ...item,
         names: item.menu_builder_item_names || [],
         descriptions: item.menu_builder_item_descriptions || [],
-        allergens: (item.menu_builder_item_allergens || []).map((r: any) => r.allergens).filter(Boolean),
-        side_dishes: (item.menu_builder_item_side_dishes || []).map((r: any) => r.side_dishes).filter(Boolean),
-        supplements: (item.menu_builder_item_supplements || []).map((r: any) => r.supplements).filter(Boolean),
+        allergen_ids: (item.menu_builder_item_allergens || []).map((r: any) => r.allergen_id),
+        side_dish_ids: (item.menu_builder_item_side_dishes || []).map((r: any) => r.side_dish_id),
+        supplement_ids: (item.menu_builder_item_supplements || []).map((r: any) => r.supplement_id),
         menu_builder_item_names: undefined,
         menu_builder_item_descriptions: undefined,
         menu_builder_item_allergens: undefined,
@@ -554,6 +554,154 @@ router.put("/:menuId/pages", async (req: Request, res: Response): Promise<void> 
 
     if (error) throw error;
     res.json({ data: data || [] });
+  } catch (err: any) {
+    res.status(500).json({ error: "SERVER_ERROR", message: err.message });
+  }
+});
+
+// =============================================================================
+// BULK PUBLISH — single request to replace all categories + items + pages
+// =============================================================================
+
+// ─── PUT /:menuId/bulk — Atomic replace of all menu content ─────────────────
+router.put("/:menuId/bulk", async (req: Request, res: Response): Promise<void> => {
+  const { categories, pages, title, subtitle, template_id, status } = req.body;
+  const menuId = req.params.menuId;
+  const restaurantId = rid(req);
+
+  if (!Array.isArray(categories)) {
+    res.status(400).json({ error: "BAD_REQUEST", message: "categories array is required" });
+    return;
+  }
+
+  try {
+    const supabase = getSupabase();
+
+    // 1. Update menu metadata if provided
+    const menuUpdates: Record<string, any> = {};
+    if (title !== undefined) menuUpdates.title = title;
+    if (subtitle !== undefined) menuUpdates.subtitle = subtitle;
+    if (template_id !== undefined) menuUpdates.template_id = template_id;
+    if (status !== undefined) menuUpdates.status = status;
+
+    if (Object.keys(menuUpdates).length > 0) {
+      const { error } = await supabase
+        .from("menus")
+        .update(menuUpdates)
+        .eq("id", menuId)
+        .eq("restaurant_id", restaurantId);
+      if (error) throw error;
+    }
+
+    // 2. Delete all existing categories (CASCADE handles items, names, etc.)
+    const { data: existingCats } = await supabase
+      .from("menu_categories")
+      .select("id")
+      .eq("menu_id", menuId);
+
+    if (existingCats && existingCats.length > 0) {
+      const { error } = await supabase
+        .from("menu_categories")
+        .delete()
+        .eq("menu_id", menuId);
+      if (error) throw error;
+    }
+
+    // 3. Create all categories + items in order
+    const categoryIdMap: Record<string, string> = {}; // local ID → backend ID
+
+    for (let i = 0; i < categories.length; i++) {
+      const cat = categories[i];
+
+      // Insert category
+      const { data: newCat, error: catErr } = await supabase
+        .from("menu_categories")
+        .insert({
+          menu_id: menuId,
+          restaurant_id: restaurantId,
+          display_order: i,
+        })
+        .select()
+        .single();
+
+      if (catErr) throw catErr;
+
+      // Map local ID to backend ID
+      if (cat.id) categoryIdMap[cat.id] = newCat.id;
+
+      // Insert category names
+      const catNames = cat.names || [{ language: "en", name: cat.name || "" }];
+      await supabase.from("menu_category_names").insert(
+        catNames.map((n: any) => ({
+          category_id: newCat.id,
+          language: n.language,
+          name: n.name,
+        }))
+      );
+
+      // Insert items for this category
+      const items = cat.items || [];
+      for (let j = 0; j < items.length; j++) {
+        const item = items[j];
+
+        const { data: newItem, error: itemErr } = await supabase
+          .from("menu_builder_items")
+          .insert({
+            menu_id: menuId,
+            restaurant_id: restaurantId,
+            category_id: newCat.id,
+            price: item.price ?? 0,
+            featured: item.featured ?? false,
+            hidden: item.hidden ?? false,
+            display_order: j,
+            image_url: item.image_url || null,
+          })
+          .select()
+          .single();
+
+        if (itemErr) throw itemErr;
+
+        // Item names
+        const itemNames = item.names || [{ language: "en", name: item.name || "" }];
+        await supabase.from("menu_builder_item_names").insert(
+          itemNames.map((n: any) => ({
+            item_id: newItem.id,
+            language: n.language,
+            name: n.name,
+          }))
+        );
+
+        // Item descriptions
+        const itemDescs = item.descriptions || (item.description ? [{ language: "en", description: item.description }] : []);
+        if (itemDescs.length > 0) {
+          await supabase.from("menu_builder_item_descriptions").insert(
+            itemDescs.map((d: any) => ({
+              item_id: newItem.id,
+              language: d.language,
+              description: d.description,
+            }))
+          );
+        }
+      }
+    }
+
+    // 4. Replace pages with remapped category IDs
+    await supabase.from("menu_pages").delete().eq("menu_id", menuId);
+
+    if (Array.isArray(pages) && pages.length > 0) {
+      const pageRows = pages.map((p: any, i: number) => ({
+        menu_id: menuId,
+        variant_id: p.variant_id,
+        category_ids: (p.category_ids || []).map((id: string) => categoryIdMap[id] || id),
+        sort_order: i,
+      }));
+
+      const { error: pageErr } = await supabase.from("menu_pages").insert(pageRows);
+      if (pageErr) throw pageErr;
+    }
+
+    // 5. Return the new category ID mapping so frontend can update local state
+    res.json({ data: { categoryIdMap } });
   } catch (err: any) {
     res.status(500).json({ error: "SERVER_ERROR", message: err.message });
   }
