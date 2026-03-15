@@ -9,6 +9,10 @@ function rid(req: Request): string {
   return req.params.restaurantId as string;
 }
 
+function isAdmin(req: Request): boolean {
+  return req.auth?.role === "admin";
+}
+
 // =============================================================================
 // MENUS — CRUD
 // =============================================================================
@@ -45,11 +49,18 @@ router.post("/", async (req: Request, res: Response): Promise<void> => {
 // ─── GET / — List menus for restaurant ───────────────────────────────────────
 router.get("/", async (req: Request, res: Response): Promise<void> => {
   try {
-    const { data, error } = await getSupabase()
+    let query = getSupabase()
       .from("menus")
       .select("*")
       .eq("restaurant_id", rid(req))
       .order("updated_at", { ascending: false });
+
+    // Non-admin users don't see disabled menus
+    if (!isAdmin(req)) {
+      query = query.eq("disabled", false);
+    }
+
+    const { data, error } = await query;
 
     if (error) throw error;
     res.json({ data: data || [] });
@@ -71,6 +82,10 @@ router.get("/:menuId", async (req: Request, res: Response): Promise<void> => {
     if (error) throw error;
     if (!data) {
       res.status(404).json({ error: "NOT_FOUND", message: "Menu not found" });
+      return;
+    }
+    if (data.disabled && !isAdmin(req)) {
+      res.status(403).json({ error: "MENU_DISABLED", message: "This menu has been deleted" });
       return;
     }
     res.json({ data });
@@ -98,6 +113,10 @@ router.get("/:menuId/complete", async (req: Request, res: Response): Promise<voi
     if (menuErr) throw menuErr;
     if (!menu) {
       res.status(404).json({ error: "NOT_FOUND", message: "Menu not found" });
+      return;
+    }
+    if (menu.disabled && !isAdmin(req)) {
+      res.status(403).json({ error: "MENU_DISABLED", message: "This menu has been deleted" });
       return;
     }
 
@@ -195,6 +214,48 @@ router.get("/:menuId/complete", async (req: Request, res: Response): Promise<voi
   }
 });
 
+// ─── PATCH /:menuId/disable — Soft-delete (owner sets disabled=true) ────────
+// NOTE: Must be defined before PATCH /:menuId to avoid route shadowing
+router.patch("/:menuId/disable", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { data, error } = await getSupabase()
+      .from("menus")
+      .update({ disabled: true })
+      .eq("id", req.params.menuId)
+      .eq("restaurant_id", rid(req))
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ data });
+  } catch (err: any) {
+    res.status(500).json({ error: "SERVER_ERROR", message: err.message });
+  }
+});
+
+// ─── PATCH /:menuId/enable — Re-enable a disabled menu (admin only) ─────────
+router.patch("/:menuId/enable", async (req: Request, res: Response): Promise<void> => {
+  if (!isAdmin(req)) {
+    res.status(403).json({ error: "FORBIDDEN", message: "Only admins can re-enable menus" });
+    return;
+  }
+
+  try {
+    const { data, error } = await getSupabase()
+      .from("menus")
+      .update({ disabled: false })
+      .eq("id", req.params.menuId)
+      .eq("restaurant_id", rid(req))
+      .select()
+      .single();
+
+    if (error) throw error;
+    res.json({ data });
+  } catch (err: any) {
+    res.status(500).json({ error: "SERVER_ERROR", message: err.message });
+  }
+});
+
 // ─── PATCH /:menuId — Update menu metadata ──────────────────────────────────
 router.patch("/:menuId", async (req: Request, res: Response): Promise<void> => {
   const { title, subtitle, template_id, status } = req.body;
@@ -225,8 +286,13 @@ router.patch("/:menuId", async (req: Request, res: Response): Promise<void> => {
   }
 });
 
-// ─── DELETE /:menuId — Delete menu (cascades everything) ────────────────────
+// ─── DELETE /:menuId — Hard delete (admin only, cascades everything) ────────
 router.delete("/:menuId", async (req: Request, res: Response): Promise<void> => {
+  if (!isAdmin(req)) {
+    res.status(403).json({ error: "FORBIDDEN", message: "Only admins can permanently delete menus" });
+    return;
+  }
+
   try {
     const { error } = await getSupabase()
       .from("menus")
