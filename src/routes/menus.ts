@@ -569,6 +569,11 @@ router.put("/:menuId/bulk", async (req: Request, res: Response): Promise<void> =
   const menuId = req.params.menuId;
   const restaurantId = rid(req);
 
+  console.log(`[BULK] menuId=${menuId} restaurantId=${restaurantId} categories=${categories?.length} pages=${pages?.length} thumbnail=${thumbnail ? 'yes(' + thumbnail.length + ' chars)' : 'no'}`);
+  for (const cat of (categories || [])) {
+    console.log(`[BULK]   cat: "${cat.name}" items=${cat.items?.length || 0}`);
+  }
+
   if (!Array.isArray(categories)) {
     res.status(400).json({ error: "BAD_REQUEST", message: "categories array is required" });
     return;
@@ -702,8 +707,10 @@ router.put("/:menuId/bulk", async (req: Request, res: Response): Promise<void> =
     }
 
     // 5. Return the new category ID mapping so frontend can update local state
+    console.log(`[BULK] SUCCESS — created ${Object.keys(categoryIdMap).length} categories`);
     res.json({ data: { categoryIdMap } });
   } catch (err: any) {
+    console.error(`[BULK] ERROR:`, err.message);
     res.status(500).json({ error: "SERVER_ERROR", message: err.message });
   }
 });
