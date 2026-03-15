@@ -64,12 +64,13 @@ Rules:
 // ─── POST / — AI assist (chat with menu context) ───────────────────────────
 router.post("/", requireAuth, async (req: Request, res: Response) => {
   try {
-    const { message, menuData, menuId, pages, chatHistory } = req.body as {
+    const { message, menuData, menuId, pages, chatHistory, language } = req.body as {
       message: string;
       menuData: any;
       menuId?: string;
       pages?: any[];
       chatHistory?: { role: string; content: string; actions?: any[]; status?: string }[];
+      language?: string;
     };
 
     if (!message) {
@@ -89,7 +90,7 @@ router.post("/", requireAuth, async (req: Request, res: Response) => {
       {
         role: "system",
         content: `${SYSTEM_PROMPT}
-
+${language && language !== "en" ? `\nIMPORTANT: The user's preferred language is "${language}". You MUST respond in ${language === "fr" ? "French" : language === "nl" ? "Dutch" : language}. Write your "message" field in ${language === "fr" ? "French" : language === "nl" ? "Dutch" : language}.\n` : ""}
 Current menu state (always reflects the latest data, including any previously applied changes):
 ${JSON.stringify(menuState, null, 2)}`,
       },
