@@ -9,6 +9,17 @@ export const swaggerSpec = {
     { url: "https://api-menu.adasystems.app", description: "Production" },
     { url: "http://localhost:5006", description: "Local development" },
   ],
+  tags: [
+    { name: "System", description: "Health check and service status" },
+    { name: "Restaurants", description: "User restaurant access" },
+    { name: "Templates", description: "Template publish status" },
+    { name: "Built-in Templates", description: "Global built-in template management" },
+    { name: "Restaurant Templates", description: "Per-restaurant template CRUD" },
+    { name: "Restaurant Menu", description: "Full menu CRUD — menus, categories, items, pages, and bulk operations" },
+    { name: "Published Menus", description: "Publish/unpublish menus for QR code access" },
+    { name: "Public Menus", description: "Public endpoints (no auth) for QR code and restaurant menu access" },
+    { name: "AI Assistant", description: "AI-powered menu editing assistant" },
+  ],
   components: {
     securitySchemes: {
       BearerAuth: {
@@ -382,7 +393,7 @@ export const swaggerSpec = {
     // ═══════════════════════════════════════════════════════════════════════════
     "/api/v1/restaurants/{restaurantId}/menus": {
       post: {
-        tags: ["Menus"],
+        tags: ["Restaurant Menu"],
         summary: "Create a menu",
         parameters: [{ name: "restaurantId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
         requestBody: {
@@ -395,7 +406,7 @@ export const swaggerSpec = {
         },
       },
       get: {
-        tags: ["Menus"],
+        tags: ["Restaurant Menu"],
         summary: "List menus for a restaurant",
         description: "Non-admin users will not see disabled menus.",
         parameters: [{ name: "restaurantId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
@@ -406,7 +417,7 @@ export const swaggerSpec = {
     },
     "/api/v1/restaurants/{restaurantId}/menus/{menuId}": {
       get: {
-        tags: ["Menus"],
+        tags: ["Restaurant Menu"],
         summary: "Get a single menu",
         description: "Non-admin users cannot see disabled menus.",
         parameters: [
@@ -420,7 +431,7 @@ export const swaggerSpec = {
         },
       },
       patch: {
-        tags: ["Menus"],
+        tags: ["Restaurant Menu"],
         summary: "Update menu metadata",
         parameters: [
           { name: "restaurantId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
@@ -435,7 +446,7 @@ export const swaggerSpec = {
         },
       },
       delete: {
-        tags: ["Menus"],
+        tags: ["Restaurant Menu"],
         summary: "Hard delete a menu (admin only)",
         description: "Permanently deletes the menu and all its content via CASCADE.",
         parameters: [
@@ -450,7 +461,7 @@ export const swaggerSpec = {
     },
     "/api/v1/restaurants/{restaurantId}/menus/{menuId}/complete": {
       get: {
-        tags: ["Menus"],
+        tags: ["Restaurant Menu"],
         summary: "Get full nested menu with categories, items, and pages",
         description: "Returns fully normalized nested structure with subcategories, item names, descriptions, allergens, side dishes, and supplements.",
         parameters: [
@@ -469,7 +480,7 @@ export const swaggerSpec = {
     },
     "/api/v1/restaurants/{restaurantId}/menus/{menuId}/disable": {
       patch: {
-        tags: ["Menus"],
+        tags: ["Restaurant Menu"],
         summary: "Soft-delete a menu",
         description: "Sets disabled=true on the menu. Any user with access can soft-delete.",
         parameters: [
@@ -483,7 +494,7 @@ export const swaggerSpec = {
     },
     "/api/v1/restaurants/{restaurantId}/menus/{menuId}/enable": {
       patch: {
-        tags: ["Menus"],
+        tags: ["Restaurant Menu"],
         summary: "Re-enable a disabled menu (admin only)",
         parameters: [
           { name: "restaurantId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
@@ -501,7 +512,7 @@ export const swaggerSpec = {
     // ═══════════════════════════════════════════════════════════════════════════
     "/api/v1/restaurants/{restaurantId}/menus/{menuId}/categories": {
       post: {
-        tags: ["Categories"],
+        tags: ["Restaurant Menu"],
         summary: "Create a category",
         parameters: [
           { name: "restaurantId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
@@ -530,7 +541,7 @@ export const swaggerSpec = {
         },
       },
       get: {
-        tags: ["Categories"],
+        tags: ["Restaurant Menu"],
         summary: "List categories for a menu",
         description: "Ordered by display_order ascending.",
         parameters: [
@@ -544,7 +555,7 @@ export const swaggerSpec = {
     },
     "/api/v1/restaurants/{restaurantId}/menus/{menuId}/categories/{catId}": {
       patch: {
-        tags: ["Categories"],
+        tags: ["Restaurant Menu"],
         summary: "Update a category",
         description: "Supports updating names, hidden status, display_order, and parent_category_id for subcategory hierarchy.",
         parameters: [
@@ -572,7 +583,7 @@ export const swaggerSpec = {
         },
       },
       delete: {
-        tags: ["Categories"],
+        tags: ["Restaurant Menu"],
         summary: "Delete a category",
         description: "CASCADE handles items, names, and subcategories.",
         parameters: [
@@ -591,7 +602,7 @@ export const swaggerSpec = {
     // ═══════════════════════════════════════════════════════════════════════════
     "/api/v1/restaurants/{restaurantId}/menus/{menuId}/categories/{catId}/items": {
       post: {
-        tags: ["Menu Items"],
+        tags: ["Restaurant Menu"],
         summary: "Create a menu item",
         parameters: [
           { name: "restaurantId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
@@ -626,7 +637,7 @@ export const swaggerSpec = {
     },
     "/api/v1/restaurants/{restaurantId}/menus/{menuId}/items/{itemId}": {
       patch: {
-        tags: ["Menu Items"],
+        tags: ["Restaurant Menu"],
         summary: "Update a menu item",
         parameters: [
           { name: "restaurantId", in: "path", required: true, schema: { type: "string", format: "uuid" } },
@@ -657,7 +668,7 @@ export const swaggerSpec = {
         },
       },
       delete: {
-        tags: ["Menu Items"],
+        tags: ["Restaurant Menu"],
         summary: "Delete a menu item",
         description: "CASCADE handles names, descriptions, allergens, side dishes, and supplements.",
         parameters: [
@@ -676,7 +687,7 @@ export const swaggerSpec = {
     // ═══════════════════════════════════════════════════════════════════════════
     "/api/v1/restaurants/{restaurantId}/menus/{menuId}/pages": {
       put: {
-        tags: ["Menu Pages"],
+        tags: ["Restaurant Menu"],
         summary: "Save/replace all pages for a menu",
         description: "Deletes all existing pages and inserts the new set. Used to persist page layout.",
         parameters: [
@@ -719,7 +730,7 @@ export const swaggerSpec = {
     // ═══════════════════════════════════════════════════════════════════════════
     "/api/v1/restaurants/{restaurantId}/menus/{menuId}/bulk": {
       put: {
-        tags: ["Menus"],
+        tags: ["Restaurant Menu"],
         summary: "Atomic bulk replace all menu content",
         description: "Replaces all categories, items, and pages in a single request. Returns a mapping of local IDs to backend IDs for frontend state sync.",
         parameters: [
