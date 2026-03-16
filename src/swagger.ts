@@ -850,6 +850,86 @@ export const swaggerSpec = {
     // ═══════════════════════════════════════════════════════════════════════════
     // PUBLIC MENUS — QR code access (no auth)
     // ═══════════════════════════════════════════════════════════════════════════
+    "/api/v1/public/menus/restaurant/{restaurantId}": {
+      get: {
+        tags: ["Public Menus"],
+        summary: "Get the current menu for a restaurant (no auth required)",
+        description: "Returns the most recently updated, non-disabled menu for a restaurant as an array of categories with nested items, subcategories, names, descriptions, allergens, side dishes, and supplements.",
+        security: [],
+        parameters: [{ name: "restaurantId", in: "path", required: true, schema: { type: "string", format: "uuid" } }],
+        responses: {
+          "200": {
+            description: "Current menu with categories and items",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    data: {
+                      type: "object",
+                      properties: {
+                        menu: {
+                          type: "object",
+                          properties: {
+                            id: { type: "string", format: "uuid" },
+                            title: { type: "string" },
+                            subtitle: { type: "string", nullable: true },
+                            status: { type: "string" },
+                            updated_at: { type: "string", format: "date-time" },
+                          },
+                        },
+                        categories: {
+                          type: "array",
+                          items: {
+                            type: "object",
+                            properties: {
+                              id: { type: "string", format: "uuid" },
+                              names: { type: "array", items: { $ref: "#/components/schemas/LocalizedName" } },
+                              display_order: { type: "integer" },
+                              items: {
+                                type: "array",
+                                items: {
+                                  type: "object",
+                                  properties: {
+                                    id: { type: "string", format: "uuid" },
+                                    price: { type: "number" },
+                                    image_url: { type: "string", nullable: true },
+                                    featured: { type: "boolean" },
+                                    display_order: { type: "integer" },
+                                    names: { type: "array", items: { $ref: "#/components/schemas/LocalizedName" } },
+                                    descriptions: { type: "array", items: { $ref: "#/components/schemas/LocalizedDescription" } },
+                                    allergen_ids: { type: "array", items: { type: "string", format: "uuid" } },
+                                    side_dish_ids: { type: "array", items: { type: "string", format: "uuid" } },
+                                    supplement_ids: { type: "array", items: { type: "string", format: "uuid" } },
+                                  },
+                                },
+                              },
+                              subcategories: {
+                                type: "array",
+                                items: {
+                                  type: "object",
+                                  properties: {
+                                    id: { type: "string", format: "uuid" },
+                                    names: { type: "array", items: { $ref: "#/components/schemas/LocalizedName" } },
+                                    display_order: { type: "integer" },
+                                    items: { type: "array", items: { type: "object" } },
+                                  },
+                                },
+                              },
+                            },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          "404": { description: "No active menu found", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+        },
+      },
+    },
     "/api/v1/public/menus/{menuId}": {
       get: {
         tags: ["Public Menus"],
