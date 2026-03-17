@@ -131,7 +131,7 @@ router.get("/:menuId", async (req: Request, res: Response): Promise<void> => {
   try {
     const { data, error } = await getSupabase()
       .from("published_menus")
-      .select("id, title, menu_data, template_data, updated_at")
+      .select("id, title, restaurant_id, menu_data, template_data, updated_at")
       .eq("id", req.params.menuId)
       .maybeSingle();
 
@@ -147,6 +147,7 @@ router.get("/:menuId", async (req: Request, res: Response): Promise<void> => {
         menu: {
           id: data.id,
           title: data.title,
+          restaurantId: data.restaurant_id,
           data: data.menu_data,
           updatedAt: data.updated_at,
         },
