@@ -214,6 +214,9 @@ router.get("/:menuId", async (req: Request, res: Response): Promise<void> => {
       categories: liveCategories,
     };
 
+    // Never cache: the QR menu must reflect the latest hide/edit state
+    // immediately. The service worker on the customer also bypasses /api/.
+    res.set("Cache-Control", "no-store, must-revalidate");
     res.json({
       data: {
         menu: {
