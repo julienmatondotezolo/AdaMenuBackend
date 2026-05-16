@@ -10,6 +10,8 @@ import publishedMenuRoutes from "./routes/publishedMenus";
 import publicMenuRoutes from "./routes/publicMenus";
 import menuRoutes from "./routes/menus";
 import aiAssistRoutes from "./routes/aiAssist";
+import legacyAllergensRoutes from "./routes/legacyAllergens";
+import adminRoutes from "./routes/admin";
 
 dotenv.config();
 
@@ -18,7 +20,17 @@ const PORT = process.env.PORT || 5006;
 const startTime = Date.now();
 const AUTH_URL = process.env.AUTH_URL || "https://auth.adasystems.app";
 
-// ─── CORS ───────────────────────────────────────────────────────────────────
+// ─── Public read-only routes (mounted BEFORE the credentialed CORS) ────────
+// Must short-circuit the request so the global cors middleware never runs —
+// otherwise it writes Access-Control-Allow-Credentials: true, which browsers
+// reject when combined with Allow-Origin: *.
+app.use(
+  "/api/v1/legacy/allergens",
+  cors({ origin: "*", credentials: false, methods: ["GET", "OPTIONS"] }),
+  legacyAllergensRoutes
+);
+
+// ─── Authenticated CORS ─────────────────────────────────────────────────────
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((o) => o.trim())
   : undefined;
@@ -128,6 +140,11 @@ app.use("/api/v1/menus", publishedMenuRoutes);
 
 // ─── Public menus (QR code — no auth) ──────────────────────────────────────
 app.use("/api/v1/public/menus", publicMenuRoutes);
+
+// ─── Admin-only operations (cross-restaurant menu reassignment, etc.) ──────
+app.use("/api/v1/admin", adminRoutes);
+
+// Legacy V1 allergens — registered above, before global CORS.
 
 // ─── Start ──────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {

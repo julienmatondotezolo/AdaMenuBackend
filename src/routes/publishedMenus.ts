@@ -38,6 +38,13 @@ router.post("/publish", requireAuth, async (req: Request, res: Response): Promis
       .single();
 
     if (error) throw error;
+
+    // Keep the draft menu's status field in sync so the Dashboard badge reflects reality
+    await supabase
+      .from("menus")
+      .update({ status: "published" })
+      .eq("id", menu_id);
+
     res.status(200).json({ data });
   } catch (err: any) {
     res.status(500).json({ error: "SERVER_ERROR", message: err.message });
@@ -47,12 +54,20 @@ router.post("/publish", requireAuth, async (req: Request, res: Response): Promis
 // ─── DELETE /api/v1/menus/:menuId/unpublish — Remove published menu ─────────
 router.delete("/:menuId/unpublish", requireAuth, async (req: Request, res: Response): Promise<void> => {
   try {
-    const { error } = await getSupabase()
+    const supabase = getSupabase();
+    const { error } = await supabase
       .from("published_menus")
       .delete()
       .eq("id", req.params.menuId);
 
     if (error) throw error;
+
+    // Keep the draft menu's status field in sync
+    await supabase
+      .from("menus")
+      .update({ status: "draft" })
+      .eq("id", req.params.menuId);
+
     res.status(204).send();
   } catch (err: any) {
     res.status(500).json({ error: "SERVER_ERROR", message: err.message });
