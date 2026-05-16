@@ -126,32 +126,104 @@ router.get("/restaurant/:restaurantId", async (req: Request, res: Response): Pro
 });
 
 // ─── GET /api/v1/public/menus/:menuId — Public QR menu access ──────────────
-// No authentication required. Returns the published menu snapshot.
+// No authentication required. Hybrid: template visuals come from the published
+// snapshot (publish-gated), but categories + items are fetched live so that
+// hide/unhide takes effect immediately on the customer side without requiring
+// a republish. Returns the same shape as before so QrMenuViewer is unchanged.
 router.get("/:menuId", async (req: Request, res: Response): Promise<void> => {
+  const { menuId } = req.params;
   try {
-    const { data, error } = await getSupabase()
+    const supabase = getSupabase();
+
+    // 1. Snapshot — gates whether the menu is publicly accessible at all,
+    //    and provides template_data (colors/fonts/layouts) which is still
+    //    publish-gated since it's a design choice.
+    const { data: snapshot, error: snapErr } = await supabase
       .from("published_menus")
       .select("id, title, restaurant_id, menu_data, template_data, updated_at")
-      .eq("id", req.params.menuId)
+      .eq("id", menuId)
       .maybeSingle();
 
-    if (error) throw error;
-
-    if (!data) {
+    if (snapErr) throw snapErr;
+    if (!snapshot) {
       res.status(404).json({ error: "NOT_FOUND", message: "Menu not found or not published" });
       return;
     }
 
+    // 2. Live categories (top-level only, hidden filtered)
+    const { data: categories, error: catErr } = await supabase
+      .from("menu_categories")
+      .select("id, display_order, hidden, menu_category_names ( language, name )")
+      .eq("menu_id", menuId)
+      .eq("hidden", false)
+      .is("parent_category_id", null)
+      .order("display_order", { ascending: true });
+
+    if (catErr) throw catErr;
+
+    // 3. Live items (hidden filtered)
+    const { data: items, error: itemErr } = await supabase
+      .from("menu_builder_items")
+      .select(`
+        id, category_id, price, featured, display_order,
+        menu_builder_item_names ( language, name ),
+        menu_builder_item_descriptions ( language, description )
+      `)
+      .eq("menu_id", menuId)
+      .eq("hidden", false)
+      .order("display_order", { ascending: true });
+
+    if (itemErr) throw itemErr;
+
+    // Helpers to pick the first localized string (matches the editor's behavior)
+    const pickName = (rows: Array<{ language: string; name: string }> | null | undefined): string => {
+      if (!rows || rows.length === 0) return "";
+      return rows.find((r) => r.language === "en")?.name || rows[0]?.name || "";
+    };
+    const pickDescription = (rows: Array<{ language: string; description: string }> | null | undefined): string => {
+      if (!rows || rows.length === 0) return "";
+      return rows.find((r) => r.language === "en")?.description || rows[0]?.description || "";
+    };
+
+    // 4. Group items by category_id and shape them for the QR menu renderer
+    const itemsByCategory = new Map<string, any[]>();
+    for (const item of items || []) {
+      const arr = itemsByCategory.get(item.category_id) ?? [];
+      arr.push({
+        id: item.id,
+        name: pickName((item as any).menu_builder_item_names),
+        price: typeof item.price === "string" ? parseFloat(item.price) || 0 : item.price ?? 0,
+        description: pickDescription((item as any).menu_builder_item_descriptions),
+        featured: !!item.featured,
+      });
+      itemsByCategory.set(item.category_id, arr);
+    }
+
+    // 5. Build the live categories array in the shape the frontend expects
+    const liveCategories = (categories || []).map((cat: any) => ({
+      id: cat.id,
+      name: pickName(cat.menu_category_names),
+      items: itemsByCategory.get(cat.id) || [],
+    }));
+
+    // 6. Merge live menu content with the snapshot's blob (so any other fields
+    //    the editor stored — established, highlight, etc. — survive).
+    const mergedMenuData = {
+      ...(snapshot.menu_data || {}),
+      title: snapshot.title,
+      categories: liveCategories,
+    };
+
     res.json({
       data: {
         menu: {
-          id: data.id,
-          title: data.title,
-          restaurantId: data.restaurant_id,
-          data: data.menu_data,
-          updatedAt: data.updated_at,
+          id: snapshot.id,
+          title: snapshot.title,
+          restaurantId: snapshot.restaurant_id,
+          data: mergedMenuData,
+          updatedAt: snapshot.updated_at,
         },
-        template: data.template_data,
+        template: snapshot.template_data,
       },
     });
   } catch (err: any) {

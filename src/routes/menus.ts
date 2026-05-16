@@ -691,6 +691,7 @@ router.put("/:menuId/bulk", async (req: Request, res: Response): Promise<void> =
         .insert({
           menu_id: menuId,
           restaurant_id: restaurantId,
+          hidden: cat.hidden ?? false,
           display_order: i,
         })
         .select()
